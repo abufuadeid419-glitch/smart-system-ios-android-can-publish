@@ -12,7 +12,7 @@ Clone https://github.com/abufuadeid419-glitch/apk-ios-ready-to-test.git, use the
 - Full repo cloned into workspace, deps installed for SDK 58, bundle id kept, Convex redeployed.
 - Phone + password auth: `/auth/start` (password or SMS code), `/auth/password/login` (scrypt hashes in separate `user_passwords` table, 5 fails → 15 min lock, constant-time compare), `/auth/password` (set only when none exists or within 15 min of SMS login; signs out other devices). Forgot password via SMS code. Existing users without a password are asked to set one.
 - Account deletion removes password records. Test seed resets the test org to ACTIVE.
-- Refreshed green palette (light + dark) via src/theme.ts.
+- Original navy + coral palette restored (user request); green refresh reverted.
 - Testing: iteration_1 + iteration_2 passed.
 
 ## Backlog
