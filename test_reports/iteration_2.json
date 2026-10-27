@@ -1,0 +1,31 @@
+{
+  "summary": "Retested the forgot-password fix and ran regressions on Expo web at 375x667. Forgot-password now works: password step -> login-forgot-password -> code step (/auth/otp/request and /auth/otp/verify were MOCKED in Playwright, no real SMS was sent) -> set-password-step appears and stays on /login. It no longer jumps to /dist. This works both with and without the device-conflict sheet (reset is kept through confirmConflict with force=true). The POST /auth/password request is sent with 'Bearer <session_token>' and the body {password}. The real server answers 400 ('لتغيير كلمة المرور سجّل الدخول برمز SMS عبر \"نسيت كلمة المرور\"'), which is expected because the mocked token has no pw_reset_until. The error is shown in login-error. With a mocked 200 save, the app goes to /dist. Regressions pass: agent +963900000004/Agent12345 reaches /dist and owner +963900000002/Owner12345 reaches /owner (device-conflict sheet shown, 'نعم' accepted). Seed check: org_test_1 was PATCHed to SUSPENDED, then seedTestAccounts set it back to ACTIVE. Test users are not blocked.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Forgot password - app reload", "issue": "The reset flag lives only in client state: has_password:false is set locally after the verify. If the app is reloaded or killed on set-password-step, boot /auth/me returns has_password:true and the user goes straight home without setting a new password. The 15-min server reset window is still open, but the UI gives no way back to it. Low priority. Optional fix: have /auth/me return a pw_reset_pending flag while pw_reset_until > now.", "affected_testIDs": ["set-password-step"]}
+    ],
+    "design_issues": [
+      {"screen": "set-password-step (reset mode)", "issues": ["The title says 'أنشئ كلمة مرور لحسابك' (create a password) even during a reset. 'تعيين كلمة مرور جديدة' would read better. Copy only, minor."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_auth_password.py"],
+  "action_items": [
+    "Optional: persist the reset-pending state on the server (e.g. a flag on /auth/me) so that a reload during the reset still shows set-password-step.",
+    "Optional: change the set-password title when in reset mode."
+  ],
+  "critical_code_review_comments": [
+    "auth.tsx signIn(): the reset override (has_password:false) is applied before the user is cached, and the conflict payload carries reset, so confirmConflict keeps the reset. Correct.",
+    "setPassword() sets has_password:true only on success. A server refusal keeps the user on set-password-step with an error, and the logout button is available. Good.",
+    "edge.ts seedTestAccounts now patches the existing org_test_1 to ACTIVE and sets expires_at to +365d. Verified."
+  ],
+  "updated_files": ["/app/test_reports/iteration_2.json"],
+  "success_rate": {"backend": "N/A (frontend only)", "frontend": "100% (forgot-password with and without conflict, agent login, owner login, seed reset)"},
+  "seed_data_creation": "Set org_test_1 to SUSPENDED temporarily to check the seed reset, then re-seeded. Re-seeded again at the end; all 4 test tokens return 200. Passwords are unchanged (Agent12345 / Owner12345).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Mock /api/auth/otp/request and /api/auth/otp/verify with page.route (verify returns {session_token:'test_token_agent', user:<from /auth/me>}). The device-conflict 'yes' button animates in: wait about 1.5s, or use dispatch_event('click'). Real password logins show the device-conflict sheet and revoke the seeded tokens, so re-seed afterwards.",
+  "rca_of_issue": "Iteration 1 bug is fixed: the reset intent is now stored in AuthProvider user state (has_password:false), so homeFor() returns 'login' and the gate no longer unmounts the set-password step."
+}

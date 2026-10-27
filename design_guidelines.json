@@ -1,0 +1,202 @@
+{
+  "app_name": "Sales & Distribution Manager",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "A trustworthy, clean, and highly operational workspace that prioritizes data readability and fast interactions over decorative chrome.",
+  "color": {
+    "light": {
+      "surface": "#FFFFFF",
+      "onSurface": "#1A1A1A",
+      "surfaceSecondary": "#F5F5F5",
+      "onSurfaceSecondary": "#333333",
+      "surfaceTertiary": "#EBEBEB",
+      "onSurfaceTertiary": "#4D4D4D",
+      "surfaceInverse": "#1A1A1A",
+      "onSurfaceInverse": "#FFFFFF",
+      "brand": "#2D6A4F",
+      "onBrand": "#FFFFFF",
+      "brandPrimary": "#40916C",
+      "onBrandPrimary": "#FFFFFF",
+      "brandSecondary": "#52B788",
+      "onBrandSecondary": "#1A1A1A",
+      "brandTertiary": "#D8F3E6",
+      "onBrandTertiary": "#1B4332",
+      "accent": "#40916C",
+      "onAccent": "#FFFFFF",
+      "accentSoft": "#D8F3E6",
+      "onAccentSoft": "#1B4332",
+      "success": "#28A745",
+      "onSuccess": "#FFFFFF",
+      "warning": "#FFB703",
+      "onWarning": "#1A1A1A",
+      "error": "#D00000",
+      "onError": "#FFFFFF",
+      "info": "#8D99AE",
+      "onInfo": "#FFFFFF",
+      "border": "#E0E0E0",
+      "borderStrong": "#CCCCCC",
+      "divider": "#EEEEEE",
+      "muted": "#757575",
+      "onBrand": "#FFFFFF",
+      "overlay": "rgba(0,0,0,0.4)",
+      "pro": "#D4AF37",
+      "onPro": "#1A1A1A",
+      "headerDeep": "#1A1A1A",
+      "onHeaderDeep": "#FFFFFF"
+    },
+    "dark": {
+      "surface": "#121212",
+      "onSurface": "#E0E0E0",
+      "surfaceSecondary": "#1E1E1E",
+      "onSurfaceSecondary": "#CCCCCC",
+      "surfaceTertiary": "#2A2A2A",
+      "onSurfaceTertiary": "#B3B3B3",
+      "surfaceInverse": "#E0E0E0",
+      "onSurfaceInverse": "#121212",
+      "brand": "#40916C",
+      "onBrand": "#FFFFFF",
+      "brandPrimary": "#52B788",
+      "onBrandPrimary": "#121212",
+      "brandSecondary": "#74C69D",
+      "onBrandSecondary": "#121212",
+      "brandTertiary": "#1B4332",
+      "onBrandTertiary": "#D8F3E6",
+      "accent": "#52B788",
+      "onAccent": "#121212",
+      "accentSoft": "#1B4332",
+      "onAccentSoft": "#D8F3E6",
+      "success": "#38B000",
+      "onSuccess": "#FFFFFF",
+      "warning": "#FFB703",
+      "onWarning": "#121212",
+      "error": "#FF4D4D",
+      "onError": "#FFFFFF",
+      "info": "#8D99AE",
+      "onInfo": "#121212",
+      "border": "#333333",
+      "borderStrong": "#444444",
+      "divider": "#222222",
+      "muted": "#888888",
+      "onBrand": "#FFFFFF",
+      "overlay": "rgba(0,0,0,0.7)",
+      "pro": "#F3E5AB",
+      "onPro": "#121212",
+      "headerDeep": "#1E1E1E",
+      "onHeaderDeep": "#E0E0E0"
+    }
+  },
+  "typography": {
+    "displayFontFamily": "Cairo",
+    "textFontFamily": "Cairo",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous spacing for tap targets (≥ 44pt); padding around related groups for quick visual scanning.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": 1,
+  "navigation": "bottom_tabs",
+  "icon_set": "Feather",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use blur on bottom tab bar over scrolling content",
+      "Use blur on floating action buttons (FABs)"
+    ],
+    "dont's": [
+      "Never blur forms, lists or data-heavy dashboard cards"
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Login",
+      "purpose": "Secure entry via phone + password with first-time SMS verification.",
+      "states": {
+        "loading": "Spinner over brand-tinted gradient background",
+        "empty": "N/A",
+        "error": "Bottom sheet or snackbar explaining authentication failure"
+      },
+      "layout": "Bottom-heavy card over abstract architectural background. Large touch inputs and sticky continue CTA above keyboard."
+    },
+    {
+      "name": "Owner Dashboard",
+      "purpose": "High-level analytics hub showing KPI cards (sales, collections) and recent activity.",
+      "states": {
+        "loading": "Skeleton grids for KPI cards",
+        "empty": "Illustration of empty desk, prompting to start operations",
+        "error": "Central alert to retry fetching analytics"
+      },
+      "layout": "Top sticky segmented controls for date filters. 2-column KPI grid, followed by vertical list of recent invoices."
+    },
+    {
+      "name": "Inventory List",
+      "purpose": "Searchable list of products with current stock levels.",
+      "states": {
+        "loading": "List skeletons",
+        "empty": "Warehouse boxes illustration with 'No products found' message",
+        "error": "Retry connection card"
+      },
+      "layout": "Sticky search header. Single-column list items with thumbnail, product name, and stock status pill. FAB for adding stock."
+    }
+  ],
+  "images": {
+    "login_hero_bg": {
+      "url": "https://images.unsplash.com/photo-1775256787282-4667858d6608?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHwzfHxtb2Rlcm4lMjBidXNpbmVzcyUyMGJ1aWxkaW5nJTIwd2lkZSUyMGFuZ2xlfGVufDB8fHx8MTc5MzEyNzA3OXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Modern business building wide angle"
+    },
+    "dashboard_empty": {
+      "url": "https://images.unsplash.com/photo-1598620617137-2ab990aadd37?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzF8MHwxfHNlYXJjaHwxfHxlbXB0eSUyMGRlc2slMjBub3RlYm9vayUyMGNhbG18ZW58MHx8fHwxNzkzMTI3MDc5fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Empty desk with notebook"
+    },
+    "inventory_empty": {
+      "url": "https://images.unsplash.com/photo-1587293852726-70cdb56c2866?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzl8MHwxfHNlYXJjaHwxfHxpbnZlbnRvcnklMjBib3hlcyUyMHdhcmVob3VzZXxlbnwwfHx8fDE3OTMxMjcwNzl8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Warehouse inventory boxes"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly preserve the 'Cairo' font and ensure all text aligns RTL as this is an Arabic app.",
+    "Replace the existing navy/coral theme tokens with the provided Forest Green / Slate palette to modernize and improve perceived trust and operational clarity.",
+    "Do NOT use indigo, violet, navy, or orange anywhere in the app per the design rules.",
+    "Keep weights at 400/500 max. Do NOT use bold or black font weights, rely on size scale instead.",
+    "Apply subtle glassmorphism (expo-blur) for sticky headers and bottom tab bars over scrolling data.",
+    "Implement loading skeletons instead of blank spinners on the dashboard and lists.",
+    "Ensure touch targets remain strictly >= 44x44pt.",
+    "Support dark mode rigorously—many operational users may check data in low light."
+  ],
+  "events": {
+    "onPressPrimaryAction": "impactMedium",
+    "onTabSelect": "selection",
+    "onToggleSwitch": "impactLight",
+    "onErrorState": "notificationError",
+    "onSuccessState": "notificationSuccess"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "summary": "Tested the password-auth feature on the live Convex HTTP API (fearless-ostrich-878) and in the Expo web preview at 390x844. Backend: 12/12 pytest pass. /auth/start, password login (wrong password, unknown phone, DEVICE_CONFLICT, force), set-password validation and refusal, and /auth/me (has_password present, no hash/salt) all behave as specified. Frontend: login, password step, wrong-password error, device-conflict sheet (yes/no), Enter-to-submit, owner set-password flow (mismatch, rules, eye toggle, Owner12345 saved -> /owner), accountant set-password step + logout, owner tabs (4) and distributor tabs (5) all load in the green theme with no page errors. One HIGH bug: the 'Forgot password' flow never shows the set-new-password step; after the SMS code is verified the user goes straight to the home screen, and there is no other way to change a password. Separately, the test org org_test_1 was SUSPENDED in the DB, so every test user landed on /blocked; I reactivated it with the dev API. No deprecated Expo packages detected (expo-av, expo-barcode-scanner, expo-background-fetch not in package.json).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "edge:seedTestAccounts (CLI)", "issue": "The seed only inserts org_test_1 if it is missing. It never resets status, plan or expires_at. The org was found SUSPENDED, so every seeded user landed on /blocked until I ran PATCH /api/dev/orgs/org_test_1 {status:ACTIVE} with test_token_dev."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Forgot-password reset flow (app/login.tsx:199-217 + app/_layout.tsx:41-55 + src/auth.tsx:234)", "issue": "'نسيت كلمة المرور' sets local state resetting=true, then verifyOtp signs the user in. That user has has_password=true and a name, so homeFor() returns dist/owner. Gate in _layout then calls router.replace and unmounts the login screen, which loses resetting=true. The set-new-password step never appears and the password stays unchanged. Reproduced in the web preview with the /auth/otp/request and /auth/otp/verify responses MOCKED via Playwright route (to avoid real SMS): after verify the URL went straight to /dist and set-password-step was not visible. There is also no 'change password' screen anywhere else in the app.", "testID": "login-forgot-password", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "login (phone step)", "issues": ["At 390x844 the trial card pushes the phone row (y 702-752) under the sticky footer (continue button starts at y 732). The phone input is half hidden on first view and the user has to scroll."]},
+      {"screen": "login (password step)", "issues": ["The ghost buttons login-change-phone and login-forgot-password are 40px tall, and login-start-trial-button is 40px tall. All are below the 44px touch-target minimum."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_auth_password.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "HIGH: Fix the forgot-password flow. Keep the reset intent outside the login screen's local state, for example a `pwReset` flag in AuthProvider set by verifyOtp when it starts from 'forgot', or have the backend return user.must_set_password when pw_reset_until is active. Then make homeFor() return 'login' while that flag is set, so Gate does not redirect before the new password is saved.",
+    "Consider adding a 'change password' entry in account settings. It can use the forgot/SMS path, since the backend requires pw_reset_until.",
+    "Make edge:seedTestAccounts idempotent for org_test_1: patch status=ACTIVE, plan=LICENSE and expires_at=+365d on every run.",
+    "Raise the small ghost buttons on the login screen to at least 44px tall, and make sure the phone input is not covered by the sticky footer on 390x844 screens."
+  ],
+  "critical_code_review_comments": [
+    "pw.ts: scrypt with a per-user salt, timingSafeEqual and a dummy-salt hash for unknown phones (timing-safe). Fine.",
+    "/auth/start returns {method:'password'} or {method:'otp'}, which reveals whether a number has a password. That is an accepted UX trade-off, but it is a mild enumeration vector. Per-phone OTP rate limiting exists.",
+    "Per-phone lockout (5 failures -> 15 min) lets anyone lock a known number out of password login. The SMS fallback mitigates this. Acceptable, just noting it.",
+    "pwStore correctly refuses to overwrite an existing password unless the session has pw_reset_until (set only on an OTP login), and it revokes the user's other sessions. Verified via API.",
+    "homeFor() uses has_password === false (strict), so cached profiles from older builds without the field do not loop. Good."
+  ],
+  "updated_files": ["/app/backend/tests/test_auth_password.py", "/app/memory/test_credentials.md"],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "~90% (all requested flows pass; forgot-password reset flow broken)"},
+  "seed_data_creation": "Set the owner +963900000002 password to Owner12345 via the UI. Reactivated org_test_1 (it was SUSPENDED) via PATCH /api/dev/orgs/org_test_1. Re-seeded tokens at the end; all 4 test tokens return 200.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run the backend tests serially: pytest -p no:xdist /app/backend/tests/test_auth_password.py. The force-login test revokes test_token_agent, so re-seed afterwards. Never call /auth/start for numbers that have no password (it sends SMS); test the reset flow by mocking /auth/otp/* with Playwright page.route and a real session obtained from /auth/password/login. Web storage stores session_token in localStorage as a JSON string: localStorage.setItem('session_token', JSON.stringify('test_token_owner')).",
+  "rca_of_issue": "Forgot-password: login.tsx keeps `resetting` as component state. After verifyOtp, AuthProvider sets user (has_password=true). Gate's effect computes homeFor(user)='dist' and router.replace('/dist') unmounts LoginScreen before the set-password-step renders. Mitigation: move the reset state into the auth context (or the server user payload) and have homeFor return 'login' while a reset is pending."
+}
