@@ -1,14 +1,13 @@
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, TextInput, useWindowDimensions, View } from "react-native";
-import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
-import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
+import { TextInput, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/src/auth";
 import { KeyboardScreen } from "@/src/components/KeyboardScreen";
 import { DeviceConflictSheet } from "@/src/components/DeviceConflictSheet";
+import { PasswordField, pwRules } from "@/src/components/PasswordField";
 import { isValidCallingCode } from "@/src/phone";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { Badge, Btn, Field, Ionicons, T } from "@/src/ui";
@@ -47,32 +46,24 @@ export default function Login() {
   return <PhoneAuth />;
 }
 
-// Hero collapses smoothly into a compact title bar while the keyboard is open, so the form and CTA
-// keep their full size instead of being squished.
 function Hero() {
   const insets = useSafeAreaInsets();
   const { height: winH } = useWindowDimensions();
   const styles = useStyles();
-  const { colors } = useTheme();
-  const { progress } = useReanimatedKeyboardAnimation();
-  const full = Math.min(winH * 0.38, 340);
-  const compact = insets.top + 72;
-  const box = useAnimatedStyle(() => ({ height: interpolate(progress.value, [0, 1], [full, compact]) }));
-  const fade = useAnimatedStyle(() => ({ opacity: interpolate(progress.value, [0, 0.5], [1, 0]), transform: [{ scale: interpolate(progress.value, [0, 1], [1, 0.9]) }] }));
+  // Fixed, compact hero: it never resizes while the keyboard moves, so the form doesn't jump.
+  const h = insets.top + Math.min(Math.max(winH * 0.17, 120), 170);
   return (
-    <Animated.View style={[styles.hero, box]} testID="login-hero">
+    <View style={[styles.hero, { height: h }]} testID="login-hero">
       <Image source={{ uri: HERO }} style={StyleFill} contentFit="cover" />
       <LinearGradient colors={["rgba(25,28,27,0.15)", "rgba(25,28,27,0.85)"]} style={StyleFill} />
-      <View style={{ paddingTop: insets.top + spacing.md, paddingHorizontal: spacing.xl, flex: 1, justifyContent: "flex-end", paddingBottom: spacing.lg }}>
-        <Animated.View style={[styles.logo, fade]}>
-          <Ionicons name="business" size={30} color={colors.onBrandPrimary} />
-        </Animated.View>
-        <T v="display" color="onBrandPrimary">النظام الذكي</T>
-        <Animated.View style={fade}>
-          <T color="onBrandPrimary" style={{ opacity: 0.9 }}>نظام متكامل لإدارة المبيعات والتوزيع</T>
-        </Animated.View>
+      <View style={{ paddingTop: insets.top + spacing.sm, paddingHorizontal: spacing.xl, flex: 1, justifyContent: "flex-end", paddingBottom: spacing.md, flexDirection: "row", alignItems: "flex-end", gap: spacing.md }}>
+        <Image testID="login-hero-logo" source={require("../assets/images/icon.png")} style={{ width: 56, height: 56, borderRadius: radius.md }} contentFit="cover" />
+        <View style={{ flex: 1 }}>
+          <T v="title" color="onBrandPrimary">النظام الذكي</T>
+          <T v="caption" color="onBrandPrimary" style={{ opacity: 0.9 }}>نظام متكامل لإدارة المبيعات والتوزيع</T>
+        </View>
       </View>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -84,16 +75,14 @@ function Features() {
   const features: { icon: any; text: string }[] = [
     { icon: "cube-outline", text: "إدارة المخزون والمنتجات" },
     { icon: "receipt-outline", text: "فواتير المبيعات والتحصيل" },
-    { icon: "people-outline", text: "الموزعون والمحاسبون والعملاء" },
+    { icon: "people-outline", text: "الموزعون والعملاء" },
   ];
   return (
-    <View style={{ gap: spacing.md }}>
+    <View style={{ flexDirection: "row", gap: spacing.sm }} testID="login-features">
       {features.map((f) => (
-        <View key={f.text} style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
-          <View style={styles.fIcon}>
-            <Ionicons name={f.icon} size={20} color={colors.brandPrimary} />
-          </View>
-          <T v="label">{f.text}</T>
+        <View key={f.text} style={styles.fChip}>
+          <Ionicons name={f.icon} size={18} color={colors.brandPrimary} />
+          <T v="caption" style={{ textAlign: "center" }} numberOfLines={2}>{f.text}</T>
         </View>
       ))}
     </View>
@@ -102,44 +91,6 @@ function Features() {
 
 const DEFAULT_CC = "+963";
 const RESEND_SECONDS = 60;
-
-// Password input with a show/hide toggle.
-function PasswordField({ testID, label, value, onChangeText, onSubmitEditing, autoFocus }: { testID: string; label: string; value: string; onChangeText: (t: string) => void; onSubmitEditing?: () => void; autoFocus?: boolean }) {
-  const { colors } = useTheme();
-  const [show, setShow] = useState(false);
-  return (
-    <View style={{ gap: spacing.xs }}>
-      <T v="label" color="onSurfaceSecondary">{label}</T>
-      <View style={[inputStyle(colors), { flexDirection: "row", alignItems: "center", paddingHorizontal: 0 }]}>
-        <TextInput
-          testID={testID}
-          value={value}
-          onChangeText={onChangeText}
-          secureTextEntry={!show}
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete="password"
-          textContentType="password"
-          autoFocus={autoFocus}
-          returnKeyType="done"
-          onSubmitEditing={onSubmitEditing}
-          placeholder="••••••••"
-          placeholderTextColor={colors.muted}
-          style={{ flex: 1, minHeight: 50, paddingHorizontal: spacing.md, fontFamily: fonts.regular, fontSize: 17, color: colors.onSurface, textAlign: "right" }}
-        />
-        <Pressable testID={`${testID}-toggle`} onPress={() => setShow(!show)} hitSlop={8} style={{ width: 48, height: 50, alignItems: "center", justifyContent: "center" }}>
-          <Ionicons name={show ? "eye-off-outline" : "eye-outline"} size={20} color={colors.muted} />
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-const pwRules = (p: string) => [
-  { ok: p.length >= 8, text: "8 أحرف على الأقل" },
-  { ok: /\p{L}/u.test(p), text: "تحتوي على حرف" },
-  { ok: /\d/.test(p), text: "تحتوي على رقم" },
-];
 
 // Phone → (password | SMS code → set password) → name (first login only).
 // Each step: scrollable form + sticky footer (error + CTA).
@@ -326,9 +277,7 @@ function PhoneAuth() {
   return screen(
     "phone-step",
     <>
-      <Features />
-      <TrialOffer picked={trialPicked} onPick={pickTrial} />
-      <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
+      <View style={{ gap: spacing.sm }}>
         <T v="label" color="onSurfaceSecondary">رقم الهاتف</T>
         <View style={{ flexDirection: "row-reverse", gap: spacing.sm }}>
           <TextInput
@@ -350,13 +299,15 @@ function PhoneAuth() {
             placeholderTextColor={colors.muted}
             returnKeyType="done"
             onSubmitEditing={next}
-            style={[inputStyle(colors), { flex: 1, textAlign: "left", writingDirection: "ltr" }]}
+            style={[inputStyle(colors), { flex: 1, minWidth: 0, textAlign: "left", writingDirection: "ltr" }]}
           />
         </View>
         {ccDigits.length > 0 && !ccValid && (
           <T testID="login-cc-error" v="caption" color="error">رمز الدولة غير صحيح، تحقق منه قبل الإرسال</T>
         )}
       </View>
+      <TrialOffer picked={trialPicked} onPick={pickTrial} />
+      <Features />
     </>,
     <>
       {err}
@@ -381,7 +332,7 @@ const inputStyle = (c: any) => ({
 const useStyles = makeStyles((c) => ({
   hero: { overflow: "hidden", backgroundColor: c.surfaceInverse },
   logo: { width: 56, height: 56, borderRadius: radius.md, backgroundColor: c.brandPrimary, alignItems: "center", justifyContent: "center", marginBottom: spacing.md },
-  body: { padding: spacing.xl, gap: spacing.xl },
+  body: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, gap: spacing.lg },
   trial: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: c.brandPrimary, backgroundColor: c.brandTertiary },
-  fIcon: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: c.brandTertiary, alignItems: "center", justifyContent: "center" },
+  fChip: { flex: 1, alignItems: "center", gap: spacing.xs, padding: spacing.sm, borderRadius: radius.md, backgroundColor: c.surfaceSecondary },
 }));

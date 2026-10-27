@@ -7,7 +7,7 @@ import { fmtDate, money } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { useApi, useMutate } from "@/src/hooks";
 import { ProComparison } from "@/src/components/ProComparison";
-import { planLabel } from "@/src/pro";
+import { MODULE_LABELS, planLabel, tierLabel } from "@/src/pro";
 import { spacing, useTheme } from "@/src/theme";
 import { Badge, Btn, Card, Empty, Field, Header, IconBtn, Ionicons, Loading, Section, Segments, Sheet, T, useToast } from "@/src/ui";
 
@@ -57,7 +57,7 @@ export default function Upgrade() {
         <Card testID="current-plan-card" style={{ gap: spacing.xs, backgroundColor: colors.brandTertiary, borderColor: colors.brandSecondary }}>
           <T v="caption">خطتك الحالية</T>
           <T v="h2">{org?.plan === "TRIAL" ? planLabel(org) : org?.plan_name ?? "Pro"}</T>
-          <T v="caption">حتى {org?.max_employees} موظفين · ينتهي {org ? fmtDate(org.expires_at) : ""}</T>
+          <T v="caption">حتى {org?.max_employees} موظفين{org?.max_distributors != null ? ` · ${org.max_distributors} موزعين` : ""} · ينتهي {org ? fmtDate(org.expires_at) : ""}</T>
         </Card>
 
         <Section title="الخطط المتاحة">
@@ -73,8 +73,9 @@ export default function Upgrade() {
           ) : (
             plans.data.map((p) => (
               <Card key={p.id} testID={`plan-card-${p.id}`} style={{ gap: spacing.sm }}>
-                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
                   <T v="h2" style={{ flex: 1 }}>{p.name}</T>
+                  <Badge testID={`plan-card-tier-${p.id}`} text={tierLabel(p.tier)} tone="pro" />
                   <T v="title" color="brandPrimary">{money(billing === "yearly" && p.yearly_price ? p.yearly_price : p.price)} <T v="caption">{p.currency}{billing === "yearly" && p.yearly_price ? " / سنة" : ""}</T></T>
                 </View>
                 <View style={{ flexDirection: "row", gap: spacing.sm }}>
@@ -85,7 +86,13 @@ export default function Upgrade() {
                 {billing === "yearly" && !!p.yearly_price && (
                   <T v="caption" testID={`yearly-monthly-equiv-${p.id}`}>يعادل {money(Math.round((p.yearly_price / 12) * 100) / 100)} {p.currency} شهرياً بدلاً من {money(p.price)}</T>
                 )}
-                <T v="caption">{p.days} يوماً · حتى {p.max_employees} موظفين</T>
+                <T v="caption">{p.days} يوماً · حتى {p.max_employees} موظفين · {p.max_distributors == null ? "موزعون بلا حد" : `حتى ${p.max_distributors} موزعين`}</T>
+                {(p.modules ?? Object.keys(MODULE_LABELS)).map((k: string) => (
+                  <View key={k} style={{ flexDirection: "row", gap: spacing.sm, alignItems: "center" }}>
+                    <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                    <T>{MODULE_LABELS[k] ?? k}</T>
+                  </View>
+                ))}
                 {p.features?.map((f: string, i: number) => (
                   <View key={i} style={{ flexDirection: "row", gap: spacing.sm, alignItems: "center" }}>
                     <Ionicons name="checkmark-circle" size={18} color={colors.success} />

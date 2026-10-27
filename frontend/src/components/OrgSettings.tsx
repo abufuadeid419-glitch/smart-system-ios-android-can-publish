@@ -133,10 +133,10 @@ export function OrgSettings() {
         <Btn testID="save-currency-button" small title="حفظ العملات" icon="checkmark" loading={saveCur.isPending} onPress={() => saveCur.mutate({ ...cur, exchange_rate: +cur.exchange_rate || 0 })} />
       </Section>
 
-      <ProLock testID="lock-daily-sms" feature="ملخص SMS اليومي">
+      <ProLock testID="lock-daily-sms" module="daily_sms" feature="ملخص SMS اليومي">
         <DailySmsSection />
       </ProLock>
-      <ProLock testID="lock-debt-sms" feature="تذكير الديون التلقائي عبر SMS">
+      <ProLock testID="lock-debt-sms" module="debt_sms" feature="تذكير الديون التلقائي عبر SMS">
         <DebtSmsSection />
       </ProLock>
 

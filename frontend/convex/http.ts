@@ -18,6 +18,7 @@ const ROUTES: Route[] = [
   ["POST", "/auth/start", "a", api.edge.start, (c) => ({ phone: String(c.b.phone ?? "") })],
   ["POST", "/auth/password/login", "a", api.pw.login, (c) => ({ phone: String(c.b.phone ?? ""), password: String(c.b.password ?? ""), force: !!c.b.force })],
   ["POST", "/auth/password", "a", api.pw.setPassword, (c) => ({ token: c.token, password: String(c.b.password ?? "") })],
+  ["POST", "/auth/password/change", "a", api.pw.changePassword, (c) => ({ token: c.token, current: String(c.b.current ?? ""), password: String(c.b.password ?? "") })],
   ["POST", "/auth/name", "m", api.edge.setName, (c) => ({ token: c.token, name: String(c.b.name ?? "") })],
   ["GET", "/auth/me", "q", api.extra.me, T],
   ["POST", "/auth/touch", "m", api.sessions.touch, (c) => ({ token: c.token, device: c.b.device, platform: c.b.platform })],

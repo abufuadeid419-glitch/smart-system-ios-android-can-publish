@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { sendSms } from "./edge";
-import { OWNER, isExpired, isPro, notify, nowIso, orgById, require } from "./lib";
+import { OWNER, hasFeature, isExpired, notify, nowIso, orgById, require } from "./lib";
 
 const DAY = 86400000;
 const PERIODS = [7, 14, 30];
@@ -58,7 +58,7 @@ export const setDebtSettings = mutation({
     const user = await require(ctx, token, OWNER);
     const org: any = await orgById(ctx, user.org_id!);
     if (!PERIODS.includes(days)) throw new Error("فترة غير صالحة");
-    if (enabled && !isPro(org)) throw new Error("تذكير الديون عبر SMS متاح في خطة Pro فقط");
+    if (enabled && !hasFeature(org, "debt_sms")) throw new Error("تذكير الديون عبر SMS غير متاح في خطتك الحالية");
     await ctx.db.patch(org._id, { debt_sms_enabled: enabled, debt_sms_days: days });
     return { enabled, days };
   },
@@ -67,7 +67,7 @@ export const setDebtSettings = mutation({
 export const collectDebtReminders = internalQuery({
   args: {},
   handler: async (ctx) => {
-    const orgs = (await ctx.db.query("organizations").collect()).filter((o: any) => o.debt_sms_enabled && isPro(o));
+    const orgs = (await ctx.db.query("organizations").collect()).filter((o: any) => o.debt_sms_enabled && hasFeature(o, "debt_sms"));
     const out: { id: string; phone: string; text: string }[] = [];
     for (const o of orgs) {
       for (const c of await dueCustomers(ctx, o)) out.push({ id: c.id, phone: toIntl(c.phone, o.phone_country_code)!, text: debtText(o, c) });

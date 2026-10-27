@@ -1,0 +1,42 @@
+{
+  "summary": "Tested the change-password flow, developer-controlled Pro/VIP plans (employee limit, distributor limit, module toggles), dev changes to a company's plan, the distributor cap, feature gating (ProLock cards plus server-side gating), and the compact login screen. Backend: 17/17 new tests passed and 12/12 regression tests (test_auth_password.py) passed. Frontend: every requested flow worked at 390x844. On narrow screens (360 and 320 wide) the login phone input ran past the right edge of the screen. I fixed this (minWidth:0) and checked the fix. No deprecated Expo packages found (no expo-av, expo-barcode-scanner or expo-background-fetch). The keyboard and Android nav-bar fixes can only be confirmed on a real device; on web, sheets open and close, footer buttons stay visible and nothing crashed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/dev/plans/:id", "issue": "Replaces the whole plan, not just the sent fields. name and price are required by the validator, and any omitted tier/modules/max_* go back to defaults (tier PRO, all modules, 5 employees). A missing id returns 200 with null instead of 404."},
+      {"endpoint": "PATCH /api/dev/orgs/:id", "issue": "max_distributors is not capped at max_employees here, but planBody does cap it (extra.ts:574 vs :593). The two are inconsistent. Also modules cannot be set back to null (the 'legacy = all features' state), so the seed org keeps whatever was last patched."},
+      {"endpoint": "POST /api/employees/invite", "issue": "Distributor-limit message is grammatically wrong in Arabic when the limit is 1 ('تسمح بـ 1 موزعين')."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "login phone row", "issue": "On web, a TextInput with flex:1 would not shrink below its natural width. The phone input overflowed the screen at 360 wide (right edge 372px) and 320 wide. FIXED by adding minWidth:0 at app/login.tsx:305 and verified: right edge is now 336 at 360 wide and 296 at 320 wide.", "testID": "login-phone-input", "priority": "MEDIUM (fixed)"},
+      {"component": "Dev org row subtitle", "issue": "Shows 'undefined · …' when the org has no owner_email (seen on org_test_1). Reference: src/screens/Dev.tsx:111 and :120", "testID": "org-row-org_test_1", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dev orgs > org-manage-sheet", "issues": ["save-org-plan-button sits inside the scroll content, not in the sheet footer, so it is cut off at the bottom when the sheet first opens. Consider using the footer prop as plan-form-sheet does."]},
+      {"screen": "Dev billing > plan-form-sheet", "issues": ["delete-plan-button deletes straight away with no confirmation."]},
+      {"screen": "Login", "issues": ["At 360x640 the 3rd feature chip label is cut off ('المحاسبون …'). At 320x568 the feature chips are hidden behind the sticky footer; scrolling still reaches them."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_plans_and_password_change.py", "/app/backend/tests/test_auth_password.py", "/app/test_reports/pytest/pytest_iter3.xml"],
+  "action_items": [
+    "Dev.tsx:111/120: handle a missing owner_email (fall back to the owner's phone or '—').",
+    "Optional: move save-org-plan-button into the Sheet footer prop; add a confirmation before delete-plan.",
+    "Optional: give PUT /dev/plans/:id partial-update semantics (or document that it replaces the whole plan) and return 404 for unknown ids; cap the org's max_distributors at max_employees in devPatchOrg.",
+    "Fix Arabic plural wording in the distributor-limit error for small numbers."
+  ],
+  "critical_code_review_comments": [
+    "changePassword: current-password failures count toward the same 5-try/15-minute lock as login, so a signed-in user can lock their own password login by mistyping here. This may be intended; just be aware.",
+    "pwStore with verified=true signs out every other session of the user. The UI does not warn about this before saving.",
+    "hasFeature treats orgs with no modules array as having every module. Once a dev saves the org once, modules becomes explicit, and there is no API to go back to 'all (legacy)'."
+  ],
+  "updated_files": ["/app/frontend/app/login.tsx (minWidth:0 on login-phone-input)", "/app/backend/tests/test_plans_and_password_change.py (new)", "/app/memory/test_credentials.md (notes appended)"],
+  "success_rate": {"backend": "100% (29/29)", "frontend": "100% of requested flows after the phone-input fix"},
+  "seed_data_creation": "Temporary plans TEST_VIP and TEST_UI_VIP and a TEST_acct invite were created and deleted. The owner and agent passwords were changed and restored (Owner12345 / Agent12345). org_test_1 was restored to plan_tier PRO, all 6 modules, max_distributors null, max_employees 15. edge:seedTestAccounts was re-run once.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest with -c /dev/null (backend/pytest.ini adds xdist args that fail). Inject a session on web with localStorage.setItem('session_token', JSON.stringify(token)). The dev user has no password, so intercept /api/auth/me and set has_password=true to get past the set-password step. Skip the tour with tour-skip-button. Owner header tabs use header-tab-<key>; OwnerMore tabs use segment-<key> (routes, tracking, profile). ProLock cards: lock-routes and lock-tracking on OwnerMore, lock-daily-sms and lock-debt-sms on the profile tab, lock-targets on Overview under header-tab-performance. Restore org_test_1 after module/limit tests (see test_credentials.md)."
+}

@@ -5,6 +5,16 @@ export const nowIso = () => new Date().toISOString();
 export const isExpired = (o: any) => !!o?.expires_at && Date.parse(o.expires_at) < Date.now();
 // Pro = paid licence or the 14-day free Pro trial, while not expired.
 export const isPro = (o: any) => !!o && o.status === "ACTIVE" && !isExpired(o) && ["TRIAL", "LICENSE"].includes(o.plan);
+// Paid-plan feature modules the developer can switch on/off per plan (or per company).
+export const MODULES = ["reports", "targets", "routes", "tracking", "daily_sms", "debt_sms"];
+export const TIERS = ["PRO", "VIP"];
+// Trial / legacy licences without a module list get every feature.
+export const hasFeature = (o: any, key: string) => isPro(o) && (!Array.isArray(o.modules) || o.modules.includes(key));
+export const cleanModules = (m: any) => {
+  if (m == null) return undefined;
+  if (!Array.isArray(m) || m.some((k) => !MODULES.includes(k))) throw new Error("ميزات غير صالحة");
+  return [...new Set(m as string[])];
+};
 export const newId = () => (globalThis.crypto as Crypto).randomUUID().replace(/-/g, "");
 export const genCode = (prefix = "") => {
   const seg = () => Math.random().toString(16).slice(2, 6).toUpperCase().padStart(4, "0");

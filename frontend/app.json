@@ -14,12 +14,13 @@
         "NSLocationWhenInUseUsageDescription": "Record where each sale and visit happens",
         "NSPhotoLibraryUsageDescription": "Choose your company logo for invoices",
         "NSCameraUsageDescription": "Scan a colleague's QR code to join"
-      }
+      },
+      "icon": "./assets/images/icon.png"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#021041"
       },
       "package": "com.emergent.mobilepreviewhub.mpqspb",
       "permissions": [
@@ -43,7 +44,11 @@
           "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000000"
+          "backgroundColor": "#021041",
+          "dark": {
+            "image": "./assets/images/splash-image.png",
+            "backgroundColor": "#021041"
+          }
         }
       ],
       "expo-font",
@@ -78,6 +83,7 @@
     "extra": {
       "supportsRTL": true,
       "forcesRTL": true
-    }
+    },
+    "backgroundColor": "#021041"
   }
 }

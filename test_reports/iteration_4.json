@@ -1,0 +1,25 @@
+{
+  "summary": "Tested the new logo/app icon config, the animated splash and the small-fix regressions on web preview at 390x844. Everything passed. The animated splash (app-splash) shows about 1s after load with the logo, 'Smart System' ('System' in blue), 'النظام الذكي', the blue divider, both taglines, the progress bar and the globe. It fades out about 2.4s after it appears, and the login phone input then takes taps. The login hero shows the new logo (login-hero-logo). Login with +963 900000004 / Agent12345 shows the device conflict sheet, and tapping 'نعم' opens /dist (distributor home). app.json icon, splash and favicon paths match the request; all files are valid PNGs (icon and adaptive-icon 1024x1024, adaptive foreground transparent, splash-image 600x600 RGBA). Regressions: the dev orgs list shows 'بدون مالك' (no 'undefined'). save-org-plan-button stays in the sheet footer at y=780 of 844 before and after scrolling. PUT /dev/plans/unknown-id returns 404 'الخطة غير موجودة'. Inviting a distributor with max_distributors=1 returns 400 'خطتك تسمح بموزع واحد فقط — قم بالترقية لإضافة المزيد'. No deprecated Expo packages found in the files reviewed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AnimatedSplash", "issues": ["In RTL (forced on web) the progress bar fills from right to left. The mockup is an LTR bar, so consider direction:'ltr' on the track if the mockup should be matched exactly (cosmetic)."]},
+      {"screen": "Global branding", "issues": ["The new logo and splash are navy/blue, but the app primary colour is still coral/red (login 'متابعة' button, distributor buttons). Consider aligning the primary colour with the new blue brand (product decision)."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter4_regressions.py", "/app/test_reports/pytest/pytest_iter4.xml"],
+  "action_items": ["Optional: force LTR on the splash progress track so it matches the mockup", "Optional: align the app primary colour with the new blue logo"],
+  "critical_code_review_comments": [
+    "Dev.tsx uses `owner_email ?? 'بدون مالك'`. An empty-string owner_email would show blank; `||` would be safer.",
+    "The native icon and splash can only be checked in a real EAS/dev build; on web only the JS splash and the config were checked."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter4_regressions.py (new)"],
+  "success_rate": {"backend": "100% (3/3 regression API checks)", "frontend": "100%"},
+  "seed_data_creation": "No new data. org_test_1 max_distributors was set to 1 for the limit test, then restored to the PRO baseline (max_distributors null, max_employees 15). Re-seeded after the UI force-login, which revokes test_token_agent.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run the iter4 tests with `CONVEX_SITE_URL=https://fearless-ostrich-878.eu-west-1.convex.site python -m pytest -c /dev/null backend/tests/test_iter4_regressions.py`, because backend/pytest.ini adds -n flags. Dev orgs list is reached by tapping the bottom tab text 'المؤسسات' (no testID on the tab). Agent UI login with force revokes test_token_agent, so re-seed afterwards."
+}

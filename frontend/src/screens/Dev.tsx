@@ -5,6 +5,8 @@ import { fmtDate } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { Monitoring } from "@/src/components/Monitoring";
 import { AccountButton } from "@/src/components/AccountButton";
+import { PlanControls, PlanControlValue, fromPlanControls, toPlanControls } from "@/src/components/PlanControls";
+import { planLabel } from "@/src/pro";
 import { useApi, useBottomChrome, useMutate } from "@/src/hooks";
 import { spacing, useTheme } from "@/src/theme";
 import { Badge, Btn, Card, Empty, ErrorBox, Field, Header, HeaderIconBtn, IconBtn, Loading, Row, Sheet, Stat, T, useToast } from "@/src/ui";
@@ -86,7 +88,12 @@ export function DevOrgs({ header }: { header?: ReactNode }) {
   const { colors } = useTheme();
   const bottom = useBottomChrome();
   const q = useApi<any[]>("/dev/orgs");
-  const [sel, setSel] = useState<any>(null);
+  const [sel, setSelRaw] = useState<any>(null);
+  const [ctl, setCtl] = useState<PlanControlValue | null>(null);
+  const setSel = (o: any) => {
+    setSelRaw(o);
+    setCtl(o ? toPlanControls(o) : null);
+  };
   const patch = useMutate<any>("PATCH", (b) => `/dev/orgs/${b.id}`, "تم تحديث المؤسسة", () => setSel(null));
   const expired = (o: any) => new Date(o.expires_at) < new Date();
   return (
@@ -101,19 +108,21 @@ export function DevOrgs({ header }: { header?: ReactNode }) {
           refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={q.refetch} tintColor={colors.brandPrimary} />}
           ListEmptyComponent={<Empty icon="business-outline" text="لا توجد مؤسسات بعد" />}
           renderItem={({ item }) => (
-            <Row testID={`org-row-${item.id}`} icon="business-outline" title={item.name} subtitle={`${item.owner_email} · ${item.employees} موظف · حتى ${fmtDate(item.expires_at)}`} onPress={() => setSel(item)}
+            <Row testID={`org-row-${item.id}`} icon="business-outline" title={item.name} subtitle={`${item.owner_email || "بدون مالك"} · ${item.employees} موظف · حتى ${fmtDate(item.expires_at)}`} onPress={() => setSel(item)}
               right={<Badge text={item.status !== "ACTIVE" ? "موقوف" : expired(item) ? "منتهي" : item.plan === "TRIAL" ? "تجريبي" : "فعّال"} tone={item.status !== "ACTIVE" || expired(item) ? "error" : item.plan === "TRIAL" ? "warning" : "success"} />} />
           )}
         />
       )}
-      <Sheet testID="org-manage-sheet" visible={!!sel} onClose={() => setSel(null)} title={sel?.name ?? ""}>
+      <Sheet testID="org-manage-sheet" visible={!!sel} onClose={() => setSel(null)} title={sel?.name ?? ""}
+        footer={sel && ctl ? <Btn testID="save-org-plan-button" title="حفظ الخطة والحدود" icon="checkmark" loading={patch.isPending} onPress={() => patch.mutate({ id: sel.id, plan_tier: ctl.tier, ...fromPlanControls(ctl) })} /> : undefined}>
         {sel && (
           <>
             <Card style={{ gap: spacing.xs }}>
-              <T v="label">{sel.owner_email}</T>
-              <T v="caption">ينتهي: {fmtDate(sel.expires_at)} · الحد: {sel.max_employees} موظفين</T>
+              <T v="label">{sel.owner_email || "بدون مالك"}</T>
+              <T v="caption">ينتهي: {fmtDate(sel.expires_at)} · {planLabel(sel)}</T>
             </Card>
-            <Btn testID="extend-30-button" title="تمديد 30 يوماً" icon="time-outline" onPress={() => patch.mutate({ id: sel.id, extend_days: 30 })} loading={patch.isPending} />
+            <PlanControls testPrefix="org" value={ctl!} onChange={setCtl} />
+            <Btn testID="extend-30-button" variant="secondary" title="تمديد 30 يوماً" icon="time-outline" onPress={() => patch.mutate({ id: sel.id, extend_days: 30 })} />
             <Btn testID="extend-365-button" variant="secondary" title="تمديد سنة" icon="calendar-outline" onPress={() => patch.mutate({ id: sel.id, extend_days: 365 })} />
             {sel.status === "ACTIVE" ? (
               <Btn testID="suspend-org-button" variant="danger" title="إيقاف المؤسسة" icon="pause-circle-outline" onPress={() => patch.mutate({ id: sel.id, status: "SUSPENDED" })} />

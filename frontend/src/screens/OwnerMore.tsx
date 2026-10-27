@@ -150,7 +150,7 @@ export default function OwnerMore() {
         refreshControl={<RefreshControl refreshing={emps.isRefetching || deliveries.isRefetching} onRefresh={() => { emps.refetch(); deliveries.refetch(); tracking.refetch(); }} tintColor={colors.brandPrimary} />}
       >
         {tab === "routes" ? (
-          <ProLock testID="lock-routes" feature="تخطيط مسارات الموزعين">
+          <ProLock testID="lock-routes" module="routes" feature="تخطيط مسارات الموزعين">
             <RoutePlanner agents={agents} />
           </ProLock>
         ) : tab === "prices" ? (
@@ -162,7 +162,7 @@ export default function OwnerMore() {
           </>
         ) : tab === "tracking" ? (
           tracking.isLoading ? <Loading /> : (
-            <ProLock testID="lock-tracking" feature="تتبع الموزعين المباشر">
+            <ProLock testID="lock-tracking" module="tracking" feature="تتبع الموزعين المباشر">
               <Btn testID="open-agents-map-button" icon="map-outline" title="الخريطة الحية" onPress={() => router.push("/agents-map" as any)} />
               <AgentsMap agents={tracking.data ?? []} />
             </ProLock>

@@ -4,6 +4,7 @@ import { Linking, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
+import { floatBarSpace } from "@/src/components/FloatingTabBar";
 import { fonts, spacing, useTheme } from "@/src/theme";
 import { Btn, Empty, Ionicons, T } from "@/src/ui";
 
@@ -45,7 +46,7 @@ export function UpdateGate({ children }: { children: React.ReactNode }) {
         <Pressable
           testID="update-banner"
           onPress={() => latest.store_url && Linking.openURL(latest.store_url)}
-          style={{ position: "absolute", left: spacing.lg, right: spacing.lg, bottom: insets.bottom + 90, backgroundColor: colors.surfaceInverse, borderRadius: 12, padding: spacing.md, flexDirection: "row", alignItems: "center", gap: spacing.sm }}
+          style={{ position: "absolute", left: spacing.lg, right: spacing.lg, bottom: floatBarSpace(insets) + spacing.sm, backgroundColor: colors.surfaceInverse, borderRadius: 12, padding: spacing.md, flexDirection: "row", alignItems: "center", gap: spacing.sm }}
         >
           <Ionicons name="sparkles-outline" size={20} color={colors.onSurfaceInverse} />
           <T style={{ flex: 1, color: colors.onSurfaceInverse, fontFamily: fonts.semibold, fontSize: 13 }}>يتوفر إصدار جديد {latest.version}</T>

@@ -1,0 +1,30 @@
+{
+  "summary": "Frontend-only retest of the floating pill tab bar for the distributor, accountant and developer roles, plus the two fixes (aria-selected and web box-shadow). The owner role was skipped because it already passed. Tests ran on the web preview at 390x844, with distributor also at 360x740. Results: aria-selected PASS. Each tab has role=tab and aria-selected='true' on the active tab only, checked after every tab tap for all 3 roles. Web box-shadow FAIL. The pill's computed box-shadow is 'rgb(31, 42, 77) 0px 0px 0px 0px', so no shadow shows. Distributor: 5 tabs in RTL order (index, sale, sales, customers, ops), all navigate. The NewSale sticky footer's submit button sits above the pill (bottom 744 vs pill top 764 at 390x844; 640 vs 660 at 360x740). The home list clears the pill: last text 700 vs pill 764, and 596 vs 660 at 360x740. Accountant (5 tabs) and developer (4 tabs), with /api/auth/me patched to has_password=true, both render the bar and navigate. Their scrollable home screens are not hidden under the bar. Other screens had too little data to scroll. Typing in customer-search-input and in the sale form causes no crash and no page errors. The account sheet (account-sheet) covers the bar: elementFromPoint at the pill centre returns logout-button. The splash shows at 0.3s and is gone by 2.5s. Login +963 900000004 / Agent12345 shows the device conflict sheet; tapping 'نعم' opens /dist.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "FloatingTabBar pill web shadow", "issue": "The web boxShadow fix has no effect. The inline style passes shadowColor (colors.brandPrimary). react-native-web turns that into an inline 'box-shadow: rgb(31,42,77) 0px 0px 0px', and the inline value overrides the boxShadow from StyleSheet.create. The pill shows no shadow on web. Reference: /app/frontend/src/components/FloatingTabBar.tsx:74 and :123", "testID": "floating-tab-bar", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Customers (distributor) search", "issues": ["When a search returns nothing, the empty state still says 'لا يوجد عملاء بعد. أضف أول عميل' ('No customers yet. Add your first one') instead of a 'no results' message (minor)."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/tests/ui_scroll_helper.js"],
+  "action_items": [
+    "FloatingTabBar.tsx: on web, do not pass shadowColor in the inline style, or move the boxShadow into the same inline style object (for example `...(Platform.OS === 'web' ? { boxShadow: '0px 6px 18px rgba(31,42,77,0.14)' } : { shadowColor: colors.brandPrimary })`). Then check that getComputedStyle(pill).boxShadow is no longer 0px 0px 0px.",
+    "Optional: show a 'no results' empty state in Customers when the search query is not empty."
+  ],
+  "critical_code_review_comments": [
+    "UpdateGate banner uses bottom: insets.bottom + 90. floatBarSpace is max(insets.bottom, 8) + 80, which is 88 when insets.bottom is 0, so the gap is only 2px. Consider using useBottomChrome() + spacing.sm.",
+    "The FloatingTabBar keyboard hide uses keyboardWillShow and keyboardDidHide from react-native-keyboard-controller. This cannot be checked on web, where the bar stays visible while typing; it needs a check on an Android device."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "94% (16/17 checks; web pill shadow failed)"},
+  "seed_data_creation": "Re-ran edge:seedTestAccounts twice: once before testing, and once after the UI login, which revokes test_token_agent.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Inject the token with localStorage.setItem('session_token', JSON.stringify('<token>')). For acct/dev, use page.route('**/api/auth/me*') and set has_password=true on the JSON (both the top level and user). Skip the tour with tour-skip-button. Tab testIDs are tab-<name>. Sale footer testID: new-sale-screen-footer; submit button: submit-sale-button. Use /app/tests/ui_scroll_helper.js with page.evaluate to check content clearance. The UI login revokes test_token_agent, so re-seed afterwards.",
+  "rca_of_issue": "Web shadow: react-native-web makes a box-shadow from the shadow* props found in the inline style. Only shadowColor is inline, so it produces a 0px 0px 0px shadow, and inline styles win over the atomic class that holds the boxShadow."
+}

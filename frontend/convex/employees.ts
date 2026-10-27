@@ -43,7 +43,17 @@ export const invite = mutation({
     const invites = (await ctx.db.query("invitations").withIndex("by_org", (q) => q.eq("org_id", user.org_id!)).collect()).filter(
       (i) => !i.used,
     ).length;
-    if (employees + invites >= (isPro(org) ? org?.max_employees ?? 0 : 1)) throw new Error("تم الوصول للحد الأقصى من الموظفين — قم بالترقية إلى Pro لإضافة المزيد");
+    if (employees + invites >= (isPro(org) ? org?.max_employees ?? 0 : 1)) throw new Error("تم الوصول للحد الأقصى من الموظفين — قم بالترقية لإضافة المزيد");
+    // Plans can cap distributors separately from the total employee count.
+    if (employee_type === "FIELD_AGENT" && isPro(org) && org?.max_distributors != null) {
+      const agents = (await ctx.db.query("users").withIndex("by_org", (q) => q.eq("org_id", user.org_id!)).collect()).filter(
+        (u: any) => u.role === "EMPLOYEE" && u.employee_type === "FIELD_AGENT",
+      ).length;
+      const agentInvites = (await ctx.db.query("invitations").withIndex("by_org", (q) => q.eq("org_id", user.org_id!)).collect()).filter(
+        (i: any) => !i.used && i.employee_type === "FIELD_AGENT",
+      ).length;
+      if (agents + agentInvites >= org.max_distributors) throw new Error(org.max_distributors === 1 ? "خطتك تسمح بموزع واحد فقط — قم بالترقية لإضافة المزيد" : `خطتك تسمح بـ ${org.max_distributors} موزعين فقط — قم بالترقية لإضافة المزيد`);
+    }
     const doc = {
       id: newId(),
       org_id: user.org_id!,

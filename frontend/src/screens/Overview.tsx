@@ -128,7 +128,7 @@ export default function Overview() {
                   </Section>
                 )}
                 {!useTabs && !isAgent && (
-                  <ProLock testID="lock-targets" feature="أهداف المبيعات ولوحة المتصدرين">
+                  <ProLock testID="lock-targets" module="targets" feature="أهداف المبيعات ولوحة المتصدرين">
                     <SalesTargetsCard />
                     <Leaderboard />
                   </ProLock>
@@ -159,7 +159,7 @@ export default function Overview() {
             {/* ─── PERFORMANCE TAB ─────────────────────────────────────────── */}
             {useTabs && tab === "performance" && (
               <>
-                <ProLock testID="lock-targets" feature="أهداف المبيعات ولوحة المتصدرين">
+                <ProLock testID="lock-targets" module="targets" feature="أهداف المبيعات ولوحة المتصدرين">
                   <SalesTargetsCard />
                   <Leaderboard />
                 </ProLock>

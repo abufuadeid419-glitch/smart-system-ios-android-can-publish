@@ -3,11 +3,13 @@ import { RefreshControl, ScrollView, View } from "react-native";
 
 import { fmtDate, money } from "@/src/api";
 import { AccountButton } from "@/src/components/AccountButton";
+import { PlanControls, fromPlanControls, toPlanControls } from "@/src/components/PlanControls";
 import { useApi, useBottomChrome, useMutate } from "@/src/hooks";
+import { MODULE_LABELS, tierLabel } from "@/src/pro";
 import { spacing, useTheme } from "@/src/theme";
 import { Badge, Btn, Card, Empty, Field, Header, HeaderIconBtn, IconBtn, Loading, Segments, Sheet, T, useToast } from "@/src/ui";
 
-const blankPlan = { name: "", price: "", yearly_price: "", currency: "USD", days: "30", max_employees: "5", features: "", active: true };
+const blankPlan = { name: "", price: "", yearly_price: "", currency: "USD", days: "30", features: "", active: true, ...toPlanControls(null) };
 
 export default function DevBilling() {
   const { colors } = useTheme();
@@ -31,7 +33,7 @@ export default function DevBilling() {
 
   const submitPlan = () => {
     if (!plan.name.trim() || plan.price === "") return toast("أدخل اسم الخطة والسعر", "error");
-    const body = { name: plan.name, price: +plan.price || 0, currency: plan.currency || "USD", days: +plan.days || 30, max_employees: +plan.max_employees || 1, features: plan.features.split("\n").map((s: string) => s.trim()).filter(Boolean), active: plan.active, yearly_price: plan.yearly_price === "" || plan.yearly_price == null ? null : +plan.yearly_price };
+    const body = { name: plan.name, price: +plan.price || 0, currency: plan.currency || "USD", days: +plan.days || 30, tier: plan.tier, ...fromPlanControls(plan), features: plan.features.split("\n").map((s: string) => s.trim()).filter(Boolean), active: plan.active, yearly_price: plan.yearly_price === "" || plan.yearly_price == null ? null : +plan.yearly_price };
     if (plan.id) updatePlan.mutate({ ...body, id: plan.id });
     else createPlan.mutate(body);
   };
@@ -63,12 +65,14 @@ export default function DevBilling() {
           )))}
         {tab === "plans" &&
           (plans.isLoading ? <Loading /> : !plans.data?.length ? <Empty icon="pricetags-outline" text="لا توجد خطط. أنشئ خطة لتظهر للمالكين." action={<Btn small testID="empty-add-plan-button" title="خطة جديدة" icon="add" onPress={() => setPlan(blankPlan)} />} /> : plans.data.map((p) => (
-            <Card key={p.id} testID={`plan-row-${p.id}`} onPress={() => setPlan({ ...p, price: String(p.price), yearly_price: p.yearly_price != null ? String(p.yearly_price) : "", days: String(p.days), max_employees: String(p.max_employees), features: (p.features ?? []).join("\n") })} style={{ gap: spacing.xs }}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Card key={p.id} testID={`plan-row-${p.id}`} onPress={() => setPlan({ ...p, price: String(p.price), yearly_price: p.yearly_price != null ? String(p.yearly_price) : "", days: String(p.days), ...toPlanControls(p), features: (p.features ?? []).join("\n") })} style={{ gap: spacing.xs }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
                 <T v="h2" style={{ flex: 1 }}>{p.name}</T>
+                <Badge testID={`plan-tier-${p.id}`} text={tierLabel(p.tier)} tone="pro" />
                 <Badge text={p.active ? "ظاهرة" : "مخفية"} tone={p.active ? "success" : "warning"} />
               </View>
-              <T>{money(p.price)} {p.currency} · {p.days} يوم · {p.max_employees} موظف</T>
+              <T>{money(p.price)} {p.currency} · {p.days} يوم · {p.max_employees} موظف · {p.max_distributors == null ? "موزعون بلا حد" : `${p.max_distributors} موزع`}</T>
+              <T v="caption">الميزات: {(p.modules ?? Object.keys(MODULE_LABELS)).length} من {Object.keys(MODULE_LABELS).length}</T>
               {p.yearly_price != null && <T v="caption" color="success">سنوي: {money(p.yearly_price)} {p.currency}</T>}
               {!!p.features?.length && <T v="caption">{p.features.join(" · ")}</T>}
             </Card>
@@ -101,11 +105,9 @@ export default function DevBilling() {
               <View style={{ flex: 1 }}><Field testID="plan-price-input" label="السعر" keyboardType="decimal-pad" value={plan.price} onChangeText={(v) => setPlan({ ...plan, price: v })} /></View>
               <View style={{ flex: 1 }}><Field testID="plan-currency-input" label="العملة" value={plan.currency} onChangeText={(v) => setPlan({ ...plan, currency: v })} /></View>
             </View>
-            <View style={{ flexDirection: "row", gap: spacing.md }}>
-              <View style={{ flex: 1 }}><Field testID="plan-days-input" label="المدة (أيام)" keyboardType="number-pad" value={plan.days} onChangeText={(v) => setPlan({ ...plan, days: v })} /></View>
-              <View style={{ flex: 1 }}><Field testID="plan-max-input" label="عدد الموظفين" keyboardType="number-pad" value={plan.max_employees} onChangeText={(v) => setPlan({ ...plan, max_employees: v })} /></View>
-            </View>
-            <Field testID="plan-features-input" label="المميزات (سطر لكل ميزة)" multiline value={plan.features} onChangeText={(v) => setPlan({ ...plan, features: v })} style={{ minHeight: 90 }} />
+            <Field testID="plan-days-input" label="المدة (أيام)" keyboardType="number-pad" value={plan.days} onChangeText={(v) => setPlan({ ...plan, days: v })} />
+            <PlanControls testPrefix="plan" value={plan} onChange={(c) => setPlan({ ...plan, ...c })} />
+            <Field testID="plan-features-input" label="نقاط تسويقية تظهر للمالك (سطر لكل نقطة)" multiline value={plan.features} onChangeText={(v) => setPlan({ ...plan, features: v })} style={{ minHeight: 90 }} />
             <Btn testID="toggle-plan-active-button" small variant="secondary" title={plan.active ? "الخطة ظاهرة للمالكين · إخفاء" : "الخطة مخفية · إظهار"} icon={plan.active ? "eye-outline" : "eye-off-outline"} onPress={() => setPlan({ ...plan, active: !plan.active })} />
           </>
         )}

@@ -149,29 +149,50 @@ export const pwResult = internalMutation({
     const user = await ctx.db.query("users").withIndex("by_phone", (q) => q.eq("phone", phone)).unique();
     const rec = user ? await ctx.db.query("user_passwords").withIndex("by_user", (q) => q.eq("user_id", user.user_id)).unique() : null;
     if (!user || !rec) return { error: "رقم الهاتف أو كلمة المرور غير صحيحة" };
-    if (!ok) {
-      const failed = (rec.failed ?? 0) + 1;
-      if (failed >= PW_MAX_FAILS) {
-        await ctx.db.patch(rec._id, { failed: 0, locked_until_ms: Date.now() + PW_LOCK_MS });
-        return { error: "محاولات خاطئة كثيرة، تم إيقاف الدخول بكلمة المرور 15 دقيقة. يمكنك استخدام \"نسيت كلمة المرور\"" };
-      }
-      await ctx.db.patch(rec._id, { failed });
-      return { error: `رقم الهاتف أو كلمة المرور غير صحيحة (متبقي ${PW_MAX_FAILS - failed} محاولات)` };
-    }
+    if (!ok) return await recordFail(ctx, rec);
     if (!(await takeOverDevice(ctx, user.user_id, !!force))) return { conflict: true };
     await ctx.db.patch(rec._id, { failed: 0, locked_until_ms: 0 });
     return await openSession(ctx, phone, session_token, false);
   },
 });
 
+async function recordFail(ctx: any, rec: any) {
+  const failed = (rec.failed ?? 0) + 1;
+  if (failed >= PW_MAX_FAILS) {
+    await ctx.db.patch(rec._id, { failed: 0, locked_until_ms: Date.now() + PW_LOCK_MS });
+    return { error: "محاولات خاطئة كثيرة، تم إيقاف الدخول بكلمة المرور 15 دقيقة. يمكنك استخدام \"نسيت كلمة المرور\"" };
+  }
+  await ctx.db.patch(rec._id, { failed });
+  return { error: `كلمة المرور غير صحيحة (متبقي ${PW_MAX_FAILS - failed} محاولات)` };
+}
+
+// Internal: password record of the signed-in user (for change-password).
+export const pwRecordByToken = internalQuery({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const user: any = await getUser(ctx, token);
+    const rec = await ctx.db.query("user_passwords").withIndex("by_user", (q) => q.eq("user_id", user.user_id)).unique();
+    return rec ? { user_id: user.user_id, hash: rec.hash, salt: rec.salt, locked_until_ms: rec.locked_until_ms ?? 0 } : null;
+  },
+});
+
+export const pwFail = internalMutation({
+  args: { user_id: v.string() },
+  handler: async (ctx, { user_id }) => {
+    const rec = await ctx.db.query("user_passwords").withIndex("by_user", (q) => q.eq("user_id", user_id)).unique();
+    return rec ? await recordFail(ctx, rec) : { error: "كلمة المرور غير صحيحة" };
+  },
+});
+
 // Internal: save a password hash. Allowed when none exists yet, or within 15 min of an SMS-verified login.
 export const pwStore = internalMutation({
-  args: { token: v.string(), salt: v.string(), hash: v.string() },
-  handler: async (ctx, { token, salt, hash }) => {
+  args: { token: v.string(), salt: v.string(), hash: v.string(), verified: v.optional(v.boolean()) },
+  handler: async (ctx, { token, salt, hash, verified }) => {
     const user: any = await getUser(ctx, token);
     const sess = await ctx.db.query("user_sessions").withIndex("by_token", (q) => q.eq("session_token", token)).unique();
     const rec = await ctx.db.query("user_passwords").withIndex("by_user", (q) => q.eq("user_id", user.user_id)).unique();
-    if (rec && !((sess?.pw_reset_until ?? 0) > Date.now())) throw new Error("لتغيير كلمة المرور سجّل الدخول برمز SMS عبر \"نسيت كلمة المرور\"");
+    // `verified` = the current password was just confirmed by pw.changePassword (internal only).
+    if (rec && !verified && !((sess?.pw_reset_until ?? 0) > Date.now())) throw new Error("لتغيير كلمة المرور سجّل الدخول برمز SMS عبر \"نسيت كلمة المرور\"");
     const doc = { user_id: user.user_id, hash, salt, failed: 0, locked_until_ms: 0, updated_at: nowIso() };
     if (rec) await ctx.db.patch(rec._id, doc);
     else await ctx.db.insert("user_passwords", doc);

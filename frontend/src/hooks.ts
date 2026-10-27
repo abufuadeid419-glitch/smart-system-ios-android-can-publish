@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
+import { floatBarSpace } from "@/src/components/FloatingTabBar";
 import { usesNativeTabs } from "@/src/navigation";
 import { pendingCount, readCache, syncQueue, writeCache } from "@/src/offline";
 import { queryClient } from "@/src/query-client";
@@ -60,8 +61,9 @@ export function useMutate<B = any>(method: string, path: string | ((b: B) => str
   });
 }
 
-// Bottom padding for content inside a tab screen.
+// Bottom padding for content inside a tab screen: NativeTabs include the bar in the inset;
+// the floating pill bar (Android / older iOS / web) overlays content, so reserve its full space.
 export function useBottomChrome() {
   const insets = useSafeAreaInsets();
-  return usesNativeTabs ? insets.bottom : 0;
+  return usesNativeTabs ? insets.bottom : floatBarSpace(insets);
 }

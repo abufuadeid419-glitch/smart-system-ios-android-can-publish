@@ -36,14 +36,37 @@ export const login = action({
   },
 });
 
+function checkStrength(password: string) {
+  if (password.length < 8 || password.length > 128 || !/\p{L}/u.test(password) || !/\d/.test(password)) {
+    throw new Error("كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على حروف وأرقام");
+  }
+}
+
 // POST /api/auth/password — set the password (first time, or after an SMS-verified reset).
 export const setPassword = action({
   args: { token: v.string(), password: v.string() },
   handler: async (ctx, { token, password }): Promise<any> => {
-    if (password.length < 8 || password.length > 128 || !/\p{L}/u.test(password) || !/\d/.test(password)) {
-      throw new Error("كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على حروف وأرقام");
-    }
+    checkStrength(password);
     const salt = randomBytes(16).toString("hex");
     return await ctx.runMutation(internal.edge.pwStore, { token, salt, hash: derive(password, salt) });
+  },
+});
+
+// POST /api/auth/password/change — signed-in user changes the password by confirming the current one.
+export const changePassword = action({
+  args: { token: v.string(), current: v.string(), password: v.string() },
+  handler: async (ctx, { token, current, password }): Promise<any> => {
+    checkStrength(password);
+    const rec: any = await ctx.runQuery(internal.edge.pwRecordByToken, { token });
+    if (!rec) throw new Error("لا توجد كلمة مرور حالية لهذا الحساب");
+    if (rec.locked_until_ms > Date.now()) throw new Error("محاولات خاطئة كثيرة، حاول لاحقاً");
+    const ok = !!current && current.length <= 128 && timingSafeEqual(Buffer.from(derive(current, rec.salt), "hex"), Buffer.from(rec.hash, "hex"));
+    if (!ok) {
+      const r: any = await ctx.runMutation(internal.edge.pwFail, { user_id: rec.user_id });
+      throw new Error(r.error);
+    }
+    if (current === password) throw new Error("كلمة المرور الجديدة يجب أن تختلف عن الحالية");
+    const salt = randomBytes(16).toString("hex");
+    return await ctx.runMutation(internal.edge.pwStore, { token, salt, hash: derive(password, salt), verified: true });
   },
 });

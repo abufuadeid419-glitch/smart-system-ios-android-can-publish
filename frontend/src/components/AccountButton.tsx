@@ -14,7 +14,8 @@ import { useApi, useMutate } from "@/src/hooks";
 import { ThemeToggle } from "@/src/components/ThemeToggle";
 import { isPro, planLabel } from "@/src/pro";
 import { spacing, useTheme } from "@/src/theme";
-import { Badge, Btn, Card, IconBtn, Row, Sheet, T, useToast } from "@/src/ui";
+import { Badge, Btn, Card, IconBtn, Ionicons, Row, Sheet, T, useToast } from "@/src/ui";
+import { PasswordField, pwRules } from "@/src/components/PasswordField";
 
 // "Trusted devices": the phones/browsers where this account stays signed in. Revoking one forces
 // that device to verify by code again.
@@ -41,6 +42,45 @@ function TrustedDevices({ open }: { open: boolean }) {
             : <IconBtn testID={`revoke-device-${s.device_id}`} icon="log-out-outline" onPress={() => revoke.mutate(s)} />}
         />
       ))}
+    </Card>
+  );
+}
+
+// Change password: confirm the current one, then choose a new one (other devices get signed out).
+function ChangePassword() {
+  const { colors } = useTheme();
+  const [open, setOpen] = useState(false);
+  const [cur, setCur] = useState("");
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  const rules = pwRules(pw);
+  const valid = !!cur && rules.every((r) => r.ok) && pw === pw2;
+  const change = useMutate("POST", "/auth/password/change", "تم تغيير كلمة المرور", () => {
+    setOpen(false);
+    setCur("");
+    setPw("");
+    setPw2("");
+  });
+  return (
+    <Card style={{ padding: 0, overflow: "hidden" }} testID="change-password-card">
+      <Row testID="open-change-password-button" icon="key-outline" title="تغيير كلمة المرور" onPress={() => setOpen(!open)} />
+      {open && (
+        <View style={{ padding: spacing.lg, paddingTop: 0, gap: spacing.md }}>
+          <PasswordField testID="current-password-input" label="كلمة المرور الحالية" value={cur} onChangeText={setCur} />
+          <PasswordField testID="new-password-input" label="كلمة المرور الجديدة" value={pw} onChangeText={setPw} />
+          <PasswordField testID="confirm-new-password-input" label="تأكيد كلمة المرور الجديدة" value={pw2} onChangeText={setPw2} />
+          <View style={{ gap: spacing.xs }}>
+            {rules.map((r) => (
+              <View key={r.text} style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
+                <Ionicons name={r.ok ? "checkmark-circle" : "ellipse-outline"} size={16} color={r.ok ? colors.success : colors.muted} />
+                <T v="caption" color={r.ok ? "success" : undefined}>{r.text}</T>
+              </View>
+            ))}
+            {pw2.length > 0 && pw !== pw2 && <T testID="change-password-mismatch" v="caption" color="error">كلمتا المرور غير متطابقتين</T>}
+          </View>
+          <Btn testID="save-new-password-button" title="حفظ كلمة المرور الجديدة" icon="lock-closed-outline" disabled={!valid} loading={change.isPending} onPress={() => change.mutate({ current: cur, password: pw })} />
+        </View>
+      )}
     </Card>
   );
 }
@@ -104,6 +144,7 @@ export function AccountButton() {
           <Badge text={roleLabel(user)} />
         </Card>
         <ThemeToggle />
+        {user?.has_password && <ChangePassword />}
         {org && (
           <Card style={{ gap: spacing.xs }}>
             <T v="label">{org.name}</T>

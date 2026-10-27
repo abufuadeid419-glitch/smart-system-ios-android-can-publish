@@ -1,10 +1,8 @@
-import { BottomTabBarHeightContext } from "expo-router/build/react-navigation/bottom-tabs";
-import React, { useContext, useState } from "react";
+import React, { useState } from "react";
 import { StyleProp, View, ViewStyle } from "react-native";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { usesNativeTabs } from "@/src/navigation";
 import { spacing, useTheme } from "@/src/theme";
 
 type Props = {
@@ -29,12 +27,11 @@ type Props = {
 export function KeyboardScreen({ children, header, footer, bottomInset, gap = spacing.lg, contentContainerStyle, backgroundColor, testID }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const tabBar = useContext(BottomTabBarHeightContext) as number | undefined;
   const [footerH, setFooterH] = useState(0);
   const pad = bottomInset ?? insets.bottom;
-  // When open, the footer must rise by (keyboard − what already sits below it): its own bottom pad
-  // plus a JS tab bar (NativeTabs already include the bar in the inset).
-  const below = pad + (usesNativeTabs ? 0 : tabBar ?? 0);
+  // When open, the footer rises by (keyboard − its own bottom pad). Tab bars never sit below the
+  // screen any more (NativeTabs / floating pill overlay content and hide while typing).
+  const below = pad;
   const bg = backgroundColor ?? colors.surface;
 
   return (

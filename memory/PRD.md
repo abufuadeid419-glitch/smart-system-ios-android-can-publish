@@ -19,3 +19,23 @@ Clone https://github.com/abufuadeid419-glitch/apk-ios-ready-to-test.git, use the
 - P1: "Change password" inside settings (with current password).
 - P1: Persist pending reset in /auth/me so an app restart mid-reset still asks for the new password.
 - P2: Compact login layout so phone field isn't under sticky button on small screens; 44px touch targets on small buttons.
+
+## Iteration 2026-06 (b)
+- Change password in account sheet (current password required, 5-fail lock shared).
+- Pro / VIP plans fully developer-controlled: tier, max employees, max distributors, per-feature modules (reports, targets, routes, tracking, daily_sms, debt_sms); developer can override per company. Backend gating via hasFeature.
+- Keyboard: sheets use keyboard-controller KeyboardAvoidingView (no double lift); login hero static & compact; phone field first.
+- Android: SystemUI root background = surface, KeyboardProvider translucent bars.
+- New logo applied (icon, adaptive icon #021041, favicon, native splash) + animated JS splash matching mockup.
+- Tests: iterations 3 & 4 passed.
+
+## Backlog
+- P2: Restyle buttons/accents to the new blue brand (optional).
+- P1: Persist pending password reset across app restart.
+
+## Iteration 2026-06 (c)
+- iOS-style floating pill bottom navigation (FloatingTabBar) for Android / iOS<26 / web; iOS 26+ keeps NativeTabs. Active capsule, navy outline icons, Arabic labels, RTL, hides while keyboard open, sits above system nav bar.
+- useBottomChrome reserves floating bar space so list ends are never hidden; KeyboardScreen footer offset updated; update banner placed above bar.
+- Tests: iteration 5 passed (all roles); web shadow fixed after.
+
+## Backlog
+- Customers search empty state should say "no results" instead of "add your first customer".

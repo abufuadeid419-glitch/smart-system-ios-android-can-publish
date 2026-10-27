@@ -21,6 +21,10 @@ import {
   round2,
   sumBy,
   isPro,
+  hasFeature,
+  MODULES,
+  TIERS,
+  cleanModules,
 } from "./lib";
 
 const PROFILE_FIELDS = ["name", "phone", "email", "address", "tax_no", "cr_no", "invoice_footer", "phone_country_code"];
@@ -328,7 +332,7 @@ export const upgradesCreate = mutation({
     const yearly = a.billing === "yearly";
     if (yearly && !plan.yearly_price) throw new Error("لا يوجد سعر سنوي لهذه الخطة");
     const org: any = await orgById(ctx, user.org_id!);
-    const doc = { id: newId(), org_id: org.id, org_name: org.name, owner_email: user.email, plan_id: plan.id, plan_name: plan.name + (yearly ? " (سنوي)" : ""), billing: yearly ? "yearly" : "monthly", price: yearly ? plan.yearly_price : plan.price, currency: plan.currency, days: yearly ? 365 : plan.days, max_employees: plan.max_employees, payment_ref: a.payment_ref.trim(), notes: a.notes ?? "", status: "PENDING", created_at: nowIso() };
+    const doc = { id: newId(), org_id: org.id, org_name: org.name, owner_email: user.email, plan_id: plan.id, plan_name: plan.name + (yearly ? " (سنوي)" : ""), billing: yearly ? "yearly" : "monthly", price: yearly ? plan.yearly_price : plan.price, currency: plan.currency, days: yearly ? 365 : plan.days, max_employees: plan.max_employees, tier: plan.tier ?? "PRO", modules: plan.modules ?? MODULES, max_distributors: plan.max_distributors ?? null, payment_ref: a.payment_ref.trim(), notes: a.notes ?? "", status: "PENDING", created_at: nowIso() };
     await ctx.db.insert("upgrade_requests", doc);
     return doc;
   },
@@ -470,7 +474,7 @@ export const statsReports = query({
     const period = p || "day";
     if (!["day", "week", "month"].includes(period)) throw new Error("فترة غير صالحة");
     // Weekly / monthly reports are a Pro (paid licence) feature; trial orgs get daily only.
-    if (period !== "day" && !isPro(await orgById(ctx, user.org_id!))) return { period, rows: [], totals: {}, locked: true };
+    if (period !== "day" && !hasFeature(await orgById(ctx, user.org_id!), "reports")) return { period, rows: [], totals: {}, locked: true };
     const n = period === "day" ? 7 : period === "week" ? 8 : 6;
     const today = new Date();
     const keys: string[] = [];
@@ -553,12 +557,21 @@ export const devOrgs = query({
 });
 
 export const devPatchOrg = mutation({
-  args: { token: v.string(), id: v.string(), status: v.optional(v.string()), extend_days: v.optional(v.number()) },
+  args: {
+    token: v.string(), id: v.string(), status: v.optional(v.string()), extend_days: v.optional(v.number()),
+    plan_tier: v.optional(v.string()), modules: v.optional(v.array(v.string())), max_employees: v.optional(v.number()),
+    max_distributors: v.optional(v.union(v.number(), v.null())),
+  },
   handler: async (ctx, a) => {
     await require(ctx, a.token, DEV);
     const org: any = await ctx.db.query("organizations").withIndex("by_biz_id", (q) => q.eq("id", a.id)).unique();
     if (!org) throw new Error("غير موجود");
     const patch: any = {};
+    // Developer can override a company's tier, features and limits directly.
+    if (a.plan_tier !== undefined) { if (!TIERS.includes(a.plan_tier)) throw new Error("فئة الخطة غير صالحة"); patch.plan_tier = a.plan_tier; }
+    if (a.modules !== undefined) patch.modules = cleanModules(a.modules);
+    if (a.max_employees !== undefined) patch.max_employees = Math.max(1, Math.floor(a.max_employees));
+    if (a.max_distributors !== undefined) patch.max_distributors = a.max_distributors == null ? null : Math.max(0, Math.min(Math.floor(a.max_distributors), patch.max_employees ?? org.max_employees ?? Infinity));
     if (a.status === "ACTIVE" || a.status === "SUSPENDED") patch.status = a.status;
     if (a.extend_days) { const base = Math.max(Date.parse(org.expires_at), Date.now()); patch.expires_at = new Date(base + a.extend_days * 86400000).toISOString(); patch.plan = "LICENSE"; }
     await ctx.db.patch(org._id, patch);
@@ -566,23 +579,42 @@ export const devPatchOrg = mutation({
   },
 });
 
+const planArgs = {
+  token: v.string(), name: v.string(), price: v.number(), currency: v.optional(v.string()), days: v.optional(v.number()),
+  max_employees: v.optional(v.number()), max_distributors: v.optional(v.union(v.number(), v.null())), tier: v.optional(v.string()),
+  modules: v.optional(v.array(v.string())), features: v.optional(v.any()), active: v.optional(v.boolean()), yearly_price: v.optional(v.union(v.number(), v.null())),
+};
+function planBody(a: any) {
+  if (!a.name.trim()) throw new Error("أدخل اسم الخطة");
+  if (a.price < 0 || (a.yearly_price != null && a.yearly_price < 0)) throw new Error("السعر غير صالح");
+  const tier = a.tier ?? "PRO";
+  if (!TIERS.includes(tier)) throw new Error("فئة الخطة غير صالحة");
+  const max_employees = Math.max(1, Math.floor(a.max_employees ?? 5));
+  const max_distributors = a.max_distributors == null ? null : Math.max(0, Math.min(Math.floor(a.max_distributors), max_employees));
+  return {
+    name: a.name.trim(), price: a.price, currency: a.currency ?? "USD", days: Math.max(1, Math.floor(a.days ?? 30)), max_employees, max_distributors,
+    tier, modules: cleanModules(a.modules) ?? MODULES, features: a.features ?? [], active: a.active ?? true, yearly_price: a.yearly_price ?? null,
+  };
+}
+
 export const devPlanCreate = mutation({
-  args: { token: v.string(), name: v.string(), price: v.number(), currency: v.optional(v.string()), days: v.optional(v.number()), max_employees: v.optional(v.number()), features: v.optional(v.any()), active: v.optional(v.boolean()), yearly_price: v.optional(v.union(v.number(), v.null())) },
+  args: planArgs,
   handler: async (ctx, a) => {
     await require(ctx, a.token, DEV);
-    const doc = { id: newId(), name: a.name, price: a.price, currency: a.currency ?? "USD", days: a.days ?? 30, max_employees: a.max_employees ?? 5, features: a.features ?? [], active: a.active ?? true, yearly_price: a.yearly_price ?? null, created_at: nowIso() };
+    const doc = { id: newId(), ...planBody(a), created_at: nowIso() };
     await ctx.db.insert("plans", doc);
     return doc;
   },
 });
 
 export const devPlanUpdate = mutation({
-  args: { token: v.string(), id: v.string(), name: v.string(), price: v.number(), currency: v.optional(v.string()), days: v.optional(v.number()), max_employees: v.optional(v.number()), features: v.optional(v.any()), active: v.optional(v.boolean()), yearly_price: v.optional(v.union(v.number(), v.null())) },
+  args: { ...planArgs, id: v.string() },
   handler: async (ctx, a) => {
     await require(ctx, a.token, DEV);
     const p: any = await ctx.db.query("plans").withIndex("by_biz_id", (q) => q.eq("id", a.id)).unique();
-    if (p) await ctx.db.patch(p._id, { name: a.name, price: a.price, currency: a.currency ?? "USD", days: a.days ?? 30, max_employees: a.max_employees ?? 5, features: a.features ?? [], active: a.active ?? true, yearly_price: a.yearly_price ?? null });
-    return p ? clean(await ctx.db.get(p._id)) : null;
+    if (!p) throw new Error("الخطة غير موجودة");
+    await ctx.db.patch(p._id, planBody(a));
+    return clean(await ctx.db.get(p._id));
   },
 });
 
@@ -612,7 +644,7 @@ export const devUpgradeReview = mutation({
     if (a.action === "approve") {
       const org: any = await orgById(ctx, req.org_id);
       const base = Math.max(Date.parse(org.expires_at), Date.now());
-      await ctx.db.patch(org._id, { plan: "LICENSE", plan_name: req.plan_name, max_employees: req.max_employees, status: "ACTIVE", expires_at: new Date(base + req.days * 86400000).toISOString() });
+      await ctx.db.patch(org._id, { plan: "LICENSE", plan_name: req.plan_name, plan_tier: req.tier ?? "PRO", modules: req.modules ?? MODULES, max_distributors: req.max_distributors ?? null, max_employees: req.max_employees, status: "ACTIVE", expires_at: new Date(base + req.days * 86400000).toISOString() });
       status = "APPROVED";
     } else if (a.action === "reject") status = "REJECTED";
     else throw new Error("إجراء غير صالح");

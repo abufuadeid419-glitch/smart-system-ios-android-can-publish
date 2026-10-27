@@ -1,12 +1,12 @@
 import { Tabs } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import React from "react";
-import { Platform } from "react-native";
 
 import { usesNativeTabs } from "@/src/navigation";
+import { FloatingTabBar } from "@/src/components/FloatingTabBar";
 import { GuidedTour } from "@/src/components/GuidedTour";
-import { fonts, useTheme } from "@/src/theme";
-import { IconName, Ionicons } from "@/src/ui";
+import { useTheme } from "@/src/theme";
+import { IconName } from "@/src/ui";
 
 export type TabDef = { name: string; title: string; icon: IconName; sf: string; desc?: string };
 
@@ -31,18 +31,8 @@ export function RoleTabs({ tabs, tourKey }: { tabs: TabDef[]; tourKey: string })
   return (
     <>
     <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.brandPrimary,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarStyle: {
-          backgroundColor: colors.surfaceSecondary,
-          borderTopColor: colors.border,
-          ...(Platform.OS === "web" ? { height: 64 } : {}),
-        },
-        tabBarItemStyle: { alignSelf: "center" },
-        tabBarLabelStyle: { fontFamily: fonts.semibold, fontSize: 12 },
-      }}
+      tabBar={(props: any) => <FloatingTabBar {...props} icons={Object.fromEntries(tabs.map((t) => [t.name, t.icon]))} />}
+      screenOptions={{ headerShown: false }}
     >
       {tabs.map((t) => (
         <Tabs.Screen
@@ -51,7 +41,6 @@ export function RoleTabs({ tabs, tourKey }: { tabs: TabDef[]; tourKey: string })
           options={{
             title: t.title,
             tabBarButtonTestID: `tab-${t.name}`,
-            tabBarIcon: ({ color, size }) => <Ionicons name={t.icon} size={size} color={color} />,
           }}
         />
       ))}
