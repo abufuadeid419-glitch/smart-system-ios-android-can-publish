@@ -71,10 +71,32 @@ export const createSales = mutation({
     const items: any[] = [];
     let total = 0;
     const { rate } = await orgMoney(ctx, user.org_id!);
+    // Strict returns: only products this distributor actually sold to this customer, up to
+    // (sold − already returned). Runs inside the mutation transaction, so concurrent or
+    // replayed (offline) requests are serialized and can never exceed the sold quantity.
+    if (!a.items.length || a.items.length > 100) throw new Error("أضف منتجاً واحداً على الأقل");
+    const sold: Record<string, number> = {};
+    for (const s of await ctx.db.query("sales").withIndex("by_customer", (q) => q.eq("customer_id", cust.id)).collect()) {
+      if (s.org_id !== user.org_id || s.distributor_id !== user.user_id || (s as any).voided) continue;
+      for (const it of (s.items ?? []) as any[]) sold[it.product_id] = (sold[it.product_id] ?? 0) + linePieces(it);
+    }
+    const returned: Record<string, number> = {};
+    for (const r of await ctx.db.query("sales_returns").withIndex("by_customer", (q) => q.eq("customer_id", cust.id)).collect()) {
+      if (r.org_id !== user.org_id || r.distributor_id !== user.user_id) continue;
+      for (const it of (r.items ?? []) as any[]) returned[it.product_id] = (returned[it.product_id] ?? 0) + (it.pieces ?? linePieces(it));
+    }
+    const asked: Record<string, number> = {};
+    for (const it of a.items) {
+      if (!(it.quantity > 0) || it.quantity > 1e6 || Math.round(it.quantity * 1000) !== it.quantity * 1000) throw new Error("كمية غير صالحة");
+    }
     for (const it of a.items) {
       const prod: any = await docOrgUnique(ctx, "products", it.product_id, user.org_id!);
       if (!prod) throw new Error("المنتج غير موجود");
       const u = unitQty(prod, it.unit, it.quantity);
+      asked[prod.id] = (asked[prod.id] ?? 0) + u.pieces;
+      const left = (sold[prod.id] ?? 0) - (returned[prod.id] ?? 0);
+      if (!sold[prod.id]) throw new Error(`لا يمكن إرجاع "${prod.name}": لم تبعه لهذا العميل`);
+      if (asked[prod.id] > left + 1e-9) throw new Error(`كمية الإرجاع لـ "${prod.name}" تتجاوز المباع (المتبقي القابل للإرجاع ${Math.max(0, round2(left))} قطعة)`);
       const piece = toBase(await priceFor(ctx, user.org_id!, cust, prod.id), prod.price_currency === "USD" ? "USD" : "SYP", rate);
       const price = u.unit === "PACKAGE" ? round2(piece * u.pieces_per_package) : piece; // per returned unit, SYP
       const line = round2(it.quantity * price);

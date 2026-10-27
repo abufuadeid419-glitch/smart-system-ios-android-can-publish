@@ -1,0 +1,46 @@
+{
+  "summary": "Billing/subscription system (Convex HTTP API) tested end-to-end. Backend: billing_smoke.py re-run all green; new pytest suite test_billing_extended.py 13/13 passed (PDF /JavaScript rejected, clean PDF accepted, NEEDS_INFO->owner resubmit->PENDING, owner cancel, refund only from APPROVED + note required, plan versions + restore, customer limit + distributor limit enforced, owner/acct/agent get 403 on all 17 /dev/* billing endpoints). Edge script billing_edge_cases.py: assign-plan ok + validation, oversize receipt rejected (4MB), yearly price/days snapshot ok, daily request rate limit enforced, acct/agent cannot cancel/list/submit. Frontend (375x667): owner /upgrade plans list (only published), monthly/yearly segments, choose plan -> upgrade-request-sheet with method option, QR image, copy account, prefilled amount, ref/notes, receipt pick (file chooser) + preview, submit -> request in 'طلبات الدفع' with 'بانتظار التحقق' badge, NEEDS_INFO note + resubmit sheet shown, cancel -> 'ملغى'. Developer: tab-billing -> dev-billing-screen stats/tabs; review-sheet with receipt image, approve/reject/needs-info/under-review buttons; needs-info with note works; Plans: edit price -> 'تعديلات غير منشورة' -> publish -> 'منشورة' (v2); Methods: add method saves; billing-settings-card saves (toast); Orgs: org sheet shows org-subscription-card usage + assign-plan options. Regression: owner password login (single-device prompt -> نعم) -> /owner, all floating tabs navigate. Deprecated API detected: expo-router/unstable-native-tabs.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PATCH /dev/upgrade-requests/:id {action:refund}", "issue": "Refund only flips request status to REFUNDED; org subscription (plan/limits/expires_at) stays active on the refunded plan. Verified: owner current-plan card still shows refunded 'TEST_EXT Pro' as فعّال. Decide: revert org to previous plan/Free or at least warn developer in UI."},
+      {"endpoint": "POST /dev/plans/:id/restore", "issue": "Restore filters out null/undefined snapshot fields (`ver.snapshot[k] ?? undefined` then filter), so fields that were null in the old version (e.g. max_distributors:null, promo_price) are NOT cleared on the draft -> restored draft may differ from the selected version. Reference: /app/frontend/convex/billing.ts:173"},
+      {"endpoint": "PUT /dev/plans/:id, POST /dev/plans/:id/restore", "issue": "Editing/restoring an archived plan silently un-archives it (status set to changed/draft). Should reject or keep archived. Reference: billing.ts:118,174"},
+      {"endpoint": "PUT /dev/plans/:id", "issue": "Args validation (e.g. missing price) runs before auth so non-dev tokens get 400 instead of 403 for malformed bodies (not a data leak, just inconsistent)."},
+      {"endpoint": "GET /upgrade-requests/:id/receipt (accountant)", "issue": "Returns 404 instead of 403 (acceptable as anti-enumeration, noting only)."},
+      {"endpoint": "POST /dev/orgs/:id/assign-plan / approve", "issue": "Switching to a different plan starts from now and drops remaining paid days of the current plan (no carry-over). Product decision - confirm intended."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Upgrade (owner)", "issues": ["Cancel request (cancel-request-*) has no confirmation; one tap cancels immediately", "'مسترد' badge light pink bg with light text - low contrast"]},
+      {"screen": "DevBilling", "issues": ["Header title truncated at 375px ('الاشتراكات والمدفو...')", "Plans list shows all archived test plans mixed with live ones; no filter to hide archived", "Publish plan has no confirmation even though it makes price live immediately", "Top tab row + status filter chips are cut off at the edge (horizontal scroll, discoverability)"]},
+      {"screen": "Org sheet (org-subscription-card)", "issues": ["RTL bidi: usage 'موزعون 1/∞' renders as '∞/1' - wrap numbers with LTR isolation"]}
+    ],
+    "react_native_issues": [
+      {"component": "expo-router/unstable-native-tabs", "issue": "Deprecated import; console warns 'expo-router/unstable-native-tabs is deprecated. Use expo-router/native-tabs instead'. Reference: /app/frontend/src/RoleTabs.tsx:2"}
+    ]
+  },
+  "test_report_links": ["/app/tests/billing_smoke.py", "/app/backend/tests/test_billing_extended.py", "/app/tests/billing_edge_cases.py", "/app/tests/ui_billing_setup.py", "/app/test_reports/pytest/billing_extended.xml"],
+  "action_items": [
+    "Decide/implement refund effect on org subscription (revert or warn) in devReview refund branch (billing.ts ~line 530)",
+    "Fix devPlanRestore to restore null fields exactly (map undefined->null for nullable fields instead of filtering)",
+    "Block PUT/restore on archived plans (or keep status archived)",
+    "Migrate import in src/RoleTabs.tsx from 'expo-router/unstable-native-tabs' to 'expo-router/native-tabs'",
+    "Add confirm dialog for owner cancel request and developer publish plan; add archived filter in Plans tab; LTR-isolate usage numbers",
+    "Free/Pro/VIP are still DRAFT with price 0 and there are 0 active payment methods -> owners currently see no plans/methods; developer must configure real prices + method before go-live"
+  ],
+  "critical_code_review_comments": [
+    "Server-side enforcement is solid: role checks, idempotency key, one-open-request, daily rate limit, magic-byte file sniffing + PDF active-content scan, price snapshot on request, amount_mismatch flag shown to reviewer, renewal stacking for same plan.",
+    "billing.ts 655 lines - near 700 limit; consider splitting plans/methods/requests modules."
+  ],
+  "updated_files": ["/app/backend/tests/test_billing_extended.py (new)", "/app/tests/billing_edge_cases.py (new)", "/app/tests/ui_billing_setup.py (new)"],
+  "success_rate": {"backend": "100% (13/13 pytest + smoke + edge script)", "frontend": "100% of requested flows passed; minor design issues only"},
+  "seed_data_creation": "Created and then archived TEST_EXT/TEST_UI plans and TEST_EXT/TEST_UI/TEST_UI2 methods (also archived leftover 'SMOKE Bank' method). Upgrade requests created by tests remain in history (CANCELLED/REFUNDED/APPROVED). billing settings restored to max_requests_per_day=5. org_test_1 restored (ACTIVE, 6 modules, max_employees 10, distributors/customers null) but plan_name is now 'TEST_UI Pro' (archived) via assign-plan, expires 2026-11-26. Tokens re-seeded after UI login.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest with `-c /dev/null` (backend/pytest.ini forces xdist): python3 -m pytest -c /dev/null --rootdir /app/backend/tests backend/tests/test_billing_extended.py. Daily request limit (5/day) blocks reruns -> use `python3 /app/tests/ui_billing_setup.py setup` (sets limit 50 + creates TEST_UI plan/method with QR, ids in /tmp/ui_billing.json) and `teardown` afterward. Customers can only be created by FIELD_AGENT (test_token_agent). Web file picking works with page.expect_file_chooser on receipt-pick-image. Tour modal appears for dev: click tour-skip-button before tabs. UI login of owner triggers single-device prompt -> revokes test_token_owner -> re-seed afterward. Server date is 2026-10-27.",
+  "rca_of_issue": ""
+}

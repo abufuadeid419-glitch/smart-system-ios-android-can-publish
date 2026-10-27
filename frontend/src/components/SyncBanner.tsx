@@ -63,7 +63,7 @@ export function SyncBanner() {
   const tone = failed.length ? colors.error : online ? colors.info : colors.warning;
   const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
   const text = !online
-    ? `بدون اتصال · ${pending.length} عملية بانتظار المزامنة`
+    ? (pending.length ? `بدون اتصال · ${pending.length} عملية بانتظار المزامنة` : "بدون اتصال")
     : syncing && progress.total > 0
       ? `جارِ المزامنة · ${progress.done}/${progress.total} (${pct}%)`
       : syncing

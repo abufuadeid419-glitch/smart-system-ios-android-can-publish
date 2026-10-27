@@ -114,6 +114,8 @@ export function ReturnSheet({ visible, onClose }: { visible: boolean; onClose: (
       toast("تم تسجيل المرتجع");
       setCust(null); setProd(null); setQty(""); setUnit("PIECE"); setReason("");
       onClose();
+    } catch (e: any) {
+      toast(e?.message ?? "تعذر تسجيل المرتجع", "error");
     } finally {
       setSaving(false);
     }

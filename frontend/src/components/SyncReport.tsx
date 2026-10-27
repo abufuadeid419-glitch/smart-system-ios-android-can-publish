@@ -57,19 +57,15 @@ export function SyncReportSheet({ visible, onClose }: { visible: boolean; onClos
       {cur === "failed" &&
         (failed.length ? (
           failed.map((f) => (
-            <Row
-              key={f.id}
-              testID={`failed-item-${f.id}`}
-              icon="alert-circle-outline"
-              title={f.label}
-              subtitle={`${f.error ?? "فشل"} · سُجّلت ${fmtDate(f.created_at)}`}
-              right={
-                <View style={{ flexDirection: "row", gap: spacing.xs }}>
-                  <Btn small variant="secondary" title="إعادة" testID={`retry-failed-${f.id}`} onPress={() => retryFailed(f.id)} />
-                  <Btn small variant="ghost" title="تجاهل" testID={`discard-failed-${f.id}`} onPress={() => discardFailed(f.id)} />
-                </View>
-              }
-            />
+            <View key={f.id} testID={`failed-item-${f.id}`} style={{ gap: spacing.xs, paddingVertical: spacing.sm }}>
+              <T v="label">{f.conflict ? "تعارض · " : ""}{f.label}</T>
+              <T testID={`failed-reason-${f.id}`} v="caption" color="error">{f.error ?? "فشل"}</T>
+              <T v="caption">سُجّلت {fmtDate(f.created_at)}</T>
+              <View style={{ flexDirection: "row", gap: spacing.xs }}>
+                <Btn small variant="secondary" title="إعادة" testID={`retry-failed-${f.id}`} onPress={() => retryFailed(f.id)} />
+                <Btn small variant="ghost" title="تجاهل" testID={`discard-failed-${f.id}`} onPress={() => discardFailed(f.id)} />
+              </View>
+            </View>
           ))
         ) : (
           <T testID="sync-failed-empty" v="caption">لا توجد عمليات فاشلة</T>

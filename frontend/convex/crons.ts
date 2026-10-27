@@ -16,4 +16,7 @@ crons.daily("debt sms reminders", { hourUTC: 7, minuteUTC: 0 }, internal.proFeat
 // Every day 08:00 UTC: Pro trial reminders (3 days left, 1 day left, expired).
 crons.daily("pro trial reminders", { hourUTC: 8, minuteUTC: 0 }, internal.proFeatures.sendTrialReminders);
 
+// Every day 08:30 UTC: paid subscription expiry reminders.
+crons.daily("subscription expiry reminders", { hourUTC: 8, minuteUTC: 30 }, internal.billing.sendExpiryReminders);
+
 export default crons;

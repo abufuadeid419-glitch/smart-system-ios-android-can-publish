@@ -2,7 +2,10 @@ import { useAuth } from "@/src/auth";
 
 // Pro = paid licence or the 14-day free Pro trial, while not expired.
 // An expired trial drops to the Free plan (app keeps working, Pro features lock).
-export const isExpired = (o: any) => !!o?.expires_at && Date.parse(o.expires_at) < Date.now();
+export const isExpired = (o: any) => {
+  const end = o?.grace_until ?? o?.expires_at;
+  return !!end && Date.parse(end) < Date.now();
+};
 export const isPro = (o: any) => !!o && o.status === "ACTIVE" && !isExpired(o) && ["TRIAL", "LICENSE"].includes(o.plan);
 export const daysLeft = (o: any) => (o?.expires_at ? Math.ceil((Date.parse(o.expires_at) - Date.now()) / 86400000) : 0);
 export const tierLabel = (t?: string) => (t === "VIP" ? "VIP" : "Pro");

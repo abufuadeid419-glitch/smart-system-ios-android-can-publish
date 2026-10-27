@@ -6,6 +6,7 @@ import { useAuth } from "@/src/auth";
 import { Monitoring } from "@/src/components/Monitoring";
 import { AccountButton } from "@/src/components/AccountButton";
 import { PlanControls, PlanControlValue, fromPlanControls, toPlanControls } from "@/src/components/PlanControls";
+import { OrgSubscription } from "@/src/components/Billing";
 import { planLabel } from "@/src/pro";
 import { useApi, useBottomChrome, useMutate } from "@/src/hooks";
 import { spacing, useTheme } from "@/src/theme";
@@ -122,6 +123,7 @@ export function DevOrgs({ header }: { header?: ReactNode }) {
               <T v="caption">ينتهي: {fmtDate(sel.expires_at)} · {planLabel(sel)}</T>
             </Card>
             <PlanControls testPrefix="org" value={ctl!} onChange={setCtl} />
+            <OrgSubscription orgId={sel.id} />
             <Btn testID="extend-30-button" variant="secondary" title="تمديد 30 يوماً" icon="time-outline" onPress={() => patch.mutate({ id: sel.id, extend_days: 30 })} />
             <Btn testID="extend-365-button" variant="secondary" title="تمديد سنة" icon="calendar-outline" onPress={() => patch.mutate({ id: sel.id, extend_days: 365 })} />
             {sel.status === "ACTIVE" ? (

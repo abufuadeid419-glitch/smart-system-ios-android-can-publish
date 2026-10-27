@@ -2,12 +2,47 @@ import { QueryCtx, MutationCtx } from "./_generated/server";
 
 // ---- id / time helpers (mirror server.py new_id / iso / gen_code) ----
 export const nowIso = () => new Date().toISOString();
-export const isExpired = (o: any) => !!o?.expires_at && Date.parse(o.expires_at) < Date.now();
+// A paid licence keeps working until the end of its grace period (grace_until), if one was set.
+export const isExpired = (o: any) => {
+  const end = o?.grace_until ?? o?.expires_at;
+  return !!end && Date.parse(end) < Date.now();
+};
 // Pro = paid licence or the 14-day free Pro trial, while not expired.
 export const isPro = (o: any) => !!o && o.status === "ACTIVE" && !isExpired(o) && ["TRIAL", "LICENSE"].includes(o.plan);
 // Paid-plan feature modules the developer can switch on/off per plan (or per company).
 export const MODULES = ["reports", "targets", "routes", "tracking", "daily_sms", "debt_sms"];
 export const TIERS = ["PRO", "VIP"];
+export const PLAN_TIERS = ["FREE", "PRO", "VIP"];
+
+// Published (owner-visible) snapshot of a plan. Legacy plans (no status) count as published when active.
+export const PLAN_FIELDS = [
+  "name", "description", "tier", "price", "yearly_price", "promo_price", "promo_until", "currency", "days", "trial_days",
+  "grace_days", "max_employees", "max_distributors", "max_customers", "modules", "features", "active", "recommended", "sort_order",
+];
+export const snapshotPlan = (p: any) => Object.fromEntries(PLAN_FIELDS.map((k) => [k, p[k] ?? null]));
+export const pubOf = (p: any) => {
+  if (!p || p.status === "archived") return null;
+  const s = p.published ?? (p.status ? null : snapshotPlan(p));
+  return s && s.active !== false ? { id: p.id, ...s, version: p.version ?? 1 } : null;
+};
+// Current price for a billing period of a published plan (server-side only; never trust the client).
+export const periodPrice = (p: any, billing: string) => {
+  if (billing === "yearly") return p.yearly_price ? { price: p.yearly_price, days: 365 } : null;
+  const promo = p.promo_price != null && (!p.promo_until || Date.parse(p.promo_until) > Date.now());
+  return { price: promo ? p.promo_price : p.price ?? 0, days: p.days ?? 30 };
+};
+
+// Effective resource limits: the org's paid licence values, otherwise the published Free plan.
+export async function orgLimits(ctx: QueryCtx, org: any) {
+  if (isPro(org)) return { employees: org.max_employees ?? 0, distributors: org.max_distributors ?? null, customers: org.max_customers ?? null };
+  const free = (await ctx.db.query("plans").collect()).map(pubOf).find((p: any) => p?.tier === "FREE");
+  return { employees: free?.max_employees ?? 1, distributors: free?.max_distributors ?? null, customers: free?.max_customers ?? null };
+}
+
+// Append-only audit trail (no receipt contents / secrets).
+export async function audit(ctx: MutationCtx, actor: any, action: string, d: { org_id?: string; target?: string; before?: any; after?: any; note?: string } = {}) {
+  await ctx.db.insert("audit_logs", { actor_id: actor?.user_id, actor_role: actor?.role, action, ...d, created_at: nowIso() });
+}
 // Trial / legacy licences without a module list get every feature.
 export const hasFeature = (o: any, key: string) => isPro(o) && (!Array.isArray(o.modules) || o.modules.includes(key));
 export const cleanModules = (m: any) => {

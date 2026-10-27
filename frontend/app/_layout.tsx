@@ -6,7 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import * as SystemUI from "expo-system-ui";
 import { useEffect } from "react";
-import { I18nManager, LogBox, Platform, View } from "react-native";
+import { AppState, I18nManager, LogBox, Platform, View } from "react-native";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
@@ -38,10 +38,23 @@ if (Platform.OS === "web") {
 }
 
 function Gate() {
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const { colors } = useTheme();
+  const signedIn = !!user;
+
+  // Keep entitlements fresh: re-read the subscription when the app returns to the foreground and
+  // every 10 minutes (the server still re-checks every privileged action).
+  useEffect(() => {
+    if (!signedIn) return;
+    const sub = AppState.addEventListener("change", (s) => s === "active" && refresh());
+    const t = setInterval(() => refresh(), 10 * 60 * 1000);
+    return () => {
+      sub.remove();
+      clearInterval(t);
+    };
+  }, [signedIn, refresh]);
 
   // Android edge-to-edge: the area behind the system navigation bar shows the root background,
   // so keep it the app surface colour (not black) and in sync with light/dark theme.

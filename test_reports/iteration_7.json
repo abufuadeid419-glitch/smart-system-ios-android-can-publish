@@ -1,0 +1,43 @@
+{
+  "summary": "Tested the offline queue, the sync badge, strict returns and owner/dev regression against the live Convex backend in a 375px mobile web preview. Backend: /app/tests/returns_validation.py passed 13/13. New pytest test_sales_returns_validation.py passed 6/6: sales with qty 0/-1/-0.5 return 400 and nothing is stored; empty items and mixed zero lines return 400; return qty 0 returns 400. Frontend: the requested flows all worked. (1) Offline collection: the badge showed sync-status-offline with count=1. The queue was still there after a reload with the API blocked (persistent). On reconnect it synced, the badge went to synced, and the server stored exactly 1 record (no duplicates). (2) A sale and then a return to a new customer, both made offline: the local check allowed the 1st return and rejected the 2nd. On reconnect both synced in the right order (server: 1 sale, 1 return, balance 0). (3) Return form: a product never sold to the customer showed the 'لا يمكن إرجاع' toast and nothing was queued. Returning 5 of 2 sold showed the 'تتجاوز المباع' toast. A valid return synced. (4) A return queued with qty 50 (planted in the stored queue) was rejected by the server on sync. The badge showed sync-status-failed count=1, and the sync report listed failed-item-* with the server's Arabic message. Retry sent it again and it failed again as expected; discard removed it and the badge went back to synced. (5) Regression: the owner tabs (index/products/customers) and the dev floating tab bar and billing tab load fine. NEW HIGH bug found: voiding a sale does not subtract returns already made against it, so stock and customer balance are credited twice. No deprecated Expo packages found.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /sales/:id/void (convex/extra.ts voidSale, lines 93-108)", "issue": "Voiding a sale after its goods were already returned credits them a second time. Reproduced: sell 2 pcs on credit, return 2 pcs, owner voids the sale. Distributor inventory ends +2 pieces (phantom stock) and the customer balance ends at -2800 instead of 0. This gets around the strict-returns rule. voidSale must subtract returned pieces and amounts per product (from sales_returns for this customer/distributor), or refuse to void when returns exist.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /sales-returns (returns.createSales line 67-69)", "issue": "The id-replay check uses docOrgUnique(org) only, so a replayed id matching another distributor's return in the same org would get that doc back. Low risk because ids are random. Also check distributor_id."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "SyncReportSheet failed row", "issue": "The failed item's title and subtitle are cut to one line with an ellipsis on a 375px screen. The server's rejection reason (e.g. 'كمية الإرجاع لـ ... تتجاوز المباع (المتبقي ...)') can't be read, which is the point of the failed tray. Let the subtitle wrap (numberOfLines undefined) or show the error on its own line.", "testID": "failed-item-{id}", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Offline detection on web", "issue": "Going offline (Playwright set_offline / browser offline) while idle never switches the badge to offline. NetInfo 12 on web only listens to navigator.connection 'change' when that API exists (Chromium) and ignores window online/offline. The Convex WebSocket also stays 'connected'. The badge only shows offline after a queued request fails. On reconnect, a flush can wait up to the 30s interval. Native NetInfo is not affected. Fix: on web, also subscribe to window 'online'/'offline' and check navigator.onLine in startSyncLoop.", "affected_testIDs": ["sync-status-badge", "sync-status-offline"]}
+    ],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/tests/returns_validation.py", "/app/backend/tests/test_sales_returns_validation.py", "/app/test_reports/pytest/pytest_sales_returns.xml"],
+  "action_items": [
+    "HIGH: Fix voidSale (convex/extra.ts) so it accounts for existing sales_returns, or blocks the void when returns exist. Otherwise stock and customer balance are credited twice.",
+    "MEDIUM: In syncQueue (offline.ts ~line 317), the dependency gate uses only the items that are due now. If a /customers or /sales item is waiting for a backoff retry, the returns/sales that depend on it are sent anyway and fail for good ('العميل غير موجود' / 'لم تبعه'). Gate on the whole queue: hold /sales-returns while any /sales item is queued, and hold everything while any /customers item is queued.",
+    "MEDIUM: Let the failed-item subtitle in SyncReport.tsx wrap so the server's rejection message can be read.",
+    "LOW: Web offline detection: also listen to window online/offline (and navigator.onLine) next to NetInfo in startSyncLoop.",
+    "LOW: The receipt (سند قبض) customer picker only lists debtors (balance>0). Fine, but the empty state 'لا توجد نتائج' could explain that only customers with debt are shown."
+  ],
+  "critical_code_review_comments": [
+    "returns.createSales correctly checks sold − returned inside the mutation (transactional). 4 concurrent over-limit returns → only 1 accepted. Replay is idempotent.",
+    "orgCustomer blocks agents from customers of other distributors (distributor_id check). scopedList uses the by_distributor index for agents. Isolation looks correct by code review; there is only one distributor, so it could not be checked live.",
+    "offlineReturn's local check depends on the /sales cache. If that cache is empty (never fetched online), every offline return is blocked with the 'no sold quantity' message. In this app /sales is prefetched on load, so it is OK today.",
+    "retryFailed on a conflict item puts it back in the queue but does not restore the optimistic row dropped by dropOptimistic. Minor.",
+    "offline.ts (428 lines) and the other reviewed files are under 700 lines. No deprecated Expo packages (expo-av / expo-barcode-scanner / expo-background-fetch) found."
+  ],
+  "updated_files": ["/app/backend/tests/test_sales_returns_validation.py (new)"],
+  "success_rate": {"backend": "100% of requested checks (19/19); 1 new HIGH bug in voidSale found by an extra integrity test", "frontend": "100% of requested flows passed; 1 MEDIUM UI issue + 1 LOW web offline-detection issue"},
+  "seed_data_creation": "Test customers created via the agent token: 'AAA TEST Debtor' (TEST_7a2abc1c, balance 1393), 'BBB TEST Fresh' (TEST_ef66daba), 'TEST_void' (TEST_aadc142e, balance -2800 left by the void bug), plus TEST_qty* / RT customer* from the test scripts. One collection with notes TEST_offline_q (7 SYP).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "org_test_1 was found SUSPENDED again at start (expires_at changed around 21:48 by another process). Re-activated with PATCH /api/dev/orgs/org_test_1 {status:ACTIVE}. Web storage = AsyncStorage → localStorage, values double JSON-encoded: localStorage.setItem('offline_queue', JSON.stringify(JSON.stringify([item]))). Set localStorage 'tour_done_dist'='true' to skip the tour. Playwright set_offline does NOT trigger NetInfo on Chromium; badge goes offline only after an enqueue fails. To test persistence: page.route(convex.site/**, abort) + reload. Receipt customer select lists only debtors. pytest must be run with -c /dev/null (backend/pytest.ini forces xdist args).",
+  "rca_of_issue": "voidSale (convex/extra.ts:99-106) adds back linePieces(it) for every sale line and subtracts s.remaining from the customer balance. It ignores sales_returns already recorded against those products for that customer, and those returns have already added the stock back and credited the balance. Repro is in /tmp/voidchk.py steps: sale 2 credit → return 2 → void → inventory +2, balance -2800."
+}

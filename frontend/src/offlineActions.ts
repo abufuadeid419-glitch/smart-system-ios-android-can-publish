@@ -1,7 +1,8 @@
 // Write actions that work offline: applied to the local cache immediately,
 // then queued and synced to the server (idempotent by client-generated id).
 import { getLastCoords } from "@/src/location";
-import { enqueue, uid, updateCached } from "@/src/offline";
+import { enqueue, readCache, uid, updateCached } from "@/src/offline";
+import { queryClient } from "@/src/query-client";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const tempNo = (prefix: string, id: string) => `${prefix}-مؤقت-${id.slice(-4).toUpperCase()}`;
@@ -13,6 +14,18 @@ const geo = () => {
 
 type Line = { product_id: string; product_name: string; quantity: number; price: number; unit?: "PIECE" | "PACKAGE"; unit_label?: string; pieces?: number };
 type SaleLine = Line;
+
+// Pieces of `product` still returnable for `customer` from the locally cached (distributor-scoped) sales and returns.
+async function returnableLocal(customerId: string, productId: string) {
+  const qd = (p: string) => (queryClient.getQueryData<any[]>([p]) ?? null);
+  const sales = qd("/sales") ?? (await readCache<any[]>("/sales")) ?? [];
+  const rets = qd("/sales-returns") ?? (await readCache<any[]>("/sales-returns")) ?? [];
+  const sum = (rows: any[]) =>
+    rows
+      .filter((s) => s.customer_id === customerId && !s.voided)
+      .reduce((m, s) => m + (s.items ?? []).filter((it: any) => it.product_id === productId).reduce((k: number, it: any) => k + Number(it.pieces ?? it.quantity ?? 0), 0), 0);
+  return sum(sales) - sum(rets);
+}
 
 export async function offlineSale(p: { customer: any; lines: SaleLine[]; paid: number | null; notes: string; userName?: string; discountType?: "NONE" | "PERCENT" | "FIXED"; discountValue?: number }) {
   const id = uid();
@@ -58,6 +71,11 @@ export async function offlineReturn(p: { customer: any; line: Line; reason: stri
   const id = uid();
   const total = r2(p.line.quantity * p.line.price);
   const pieces = p.line.pieces ?? p.line.quantity;
+  // Same rule as the server (returns.createSales): only what this distributor sold to this customer,
+  // minus returns already made (synced or still queued). The server re-checks on sync.
+  const left = await returnableLocal(p.customer.id, p.line.product_id);
+  if (left <= 0) throw new Error(`لا يمكن إرجاع "${p.line.product_name}": لا توجد كمية مباعة قابلة للإرجاع لهذا العميل`);
+  if (pieces > left + 1e-9) throw new Error(`كمية الإرجاع تتجاوز المباع — المتبقي القابل للإرجاع ${r2(left)} قطعة`);
   const body = { id, customer_id: p.customer.id, items: [{ product_id: p.line.product_id, quantity: p.line.quantity, price: p.line.price, unit: p.line.unit ?? "PIECE" }], reason: p.reason, ...geo() };
   const doc = { id, pending: true, return_no: tempNo("RET", id), customer_id: p.customer.id, customer_name: p.customer.name, distributor_name: p.userName, items: [{ ...p.line, total }], total, reason: p.reason, created_at: new Date().toISOString() };
   await updateCached<any[]>("/my/inventory", (inv) => {

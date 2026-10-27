@@ -1,0 +1,32 @@
+{
+  "summary": "Retest of the iteration-7 fixes. All 4 fixes are verified and the regressions still pass. Backend: void_guard.py 5/5, returns_validation.py 13/13, new pytest test_iter8_void_guard_offline_order.py 5/5. The new tests cover: a void restores distributor stock and balance; a second void of the same sale is refused (404); a partial return blocks the void and nothing changes; returns covered by another sale do not block the void; a return sent before its sale is rejected; an online sale and collection still work and over-collection is rejected. Frontend (375x667 web): the queue was injected as [return, sale, over-quantity return, customer], with the customer item waiting on backoff (+12s). Nothing was sent for 12s. Then the customer was sent, then the sale after the customer response, then the returns after the sale response. The valid return succeeded and the over-quantity return went to the failed tray with the full server message. Checked through the API: 1 customer, 1 sale, 1 return, no duplicates. SyncReport shows failed-reason-<id> on its own wrapping line (white-space pre-wrap, 2 lines, full text) with retry and discard buttons. Retry and discard both work. On web, context.set_offline(True) switches the badge to sync-status-offline within 1s and back to sync-status-synced on reconnect. Synthetic window online/offline events do the same. A pending item is sent at most 0.5s after reconnect, with no 30s wait.",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "POST /sales/:id/void", "issue": "stock_movements for SALE_VOID always save by_role 'AGENT', but voids are done by STAFF (owner/accountant). This was already there before this iteration. Reference: convex/extra.ts:116"}
+  ]},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "SyncReport failed item", "issues": ["The retry and discard buttons are 40px tall, below the 44px minimum touch target (retry-failed-<id>, discard-failed-<id>)."]},
+      {"screen": "Home sync banner (offline, empty queue)", "issues": ["Says 'بدون اتصال · 0 عملية بانتظار المزامنة'. When the queue is empty it would read better as just 'بدون اتصال'."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter8_void_guard_offline_order.py", "/app/tests/void_guard.py", "/app/tests/returns_validation.py", "/app/tests/iter8_prep.py", "/app/test_reports/pytest/iter8.xml"],
+  "action_items": [
+    "LOW: Make the SyncReport retry/discard buttons at least 44px tall.",
+    "LOW: Hide '0 عملية' in the offline banner when the queue is empty.",
+    "LOW (optional): If a /customers item ends up in the failed tray (permanent rejection), the sales, collections and returns that depend on it are still sent and fail. Consider holding items whose customer_id matches a failed customer item, or showing a hint in the tray."
+  ],
+  "critical_code_review_comments": [
+    "offline.ts: the dependency gate blocks the whole queue while any /customers item is queued. That includes unrelated items such as stock requests and deliveries for existing customers. Backoff is capped at 5 attempts, so the delay is limited and this is acceptable.",
+    "extra.ts voidSale: the net check (other non-voided sales minus returns, per product, same distributor) is correct, and it refuses before any stock or balance change."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter8_void_guard_offline_order.py (new)", "/app/tests/iter8_prep.py (new)"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Created TEST_VT_* and TEST_UIA_/TEST_UIB_* customers with small sales, returns and collections on org_test_1 (agent test_token_agent).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "org_test_1 was ACTIVE at the start of this run. Run pytest with -c /dev/null -p no:xdist. Web storage values are double JSON-encoded: localStorage.setItem('offline_queue', JSON.stringify(JSON.stringify(q))). On this build, Playwright context.set_offline DOES flip the badge (window online/offline listeners). The badge gives problem states priority: when failed items exist it shows sync-status-failed even while offline. Open the sync sheet by tapping sync-status-badge, then sync-tab-failed. The server clock reads 2026-10.",
+  "rca_of_issue": ""
+}

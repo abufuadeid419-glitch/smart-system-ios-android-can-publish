@@ -39,3 +39,21 @@ Clone https://github.com/abufuadeid419-glitch/apk-ios-ready-to-test.git, use the
 
 ## Backlog
 - Customers search empty state should say "no results" instead of "add your first customer".
+
+## Iteration 2026-06 (d) — Billing system
+- convex/billing.ts: Free/Pro/VIP plans with draft→publish, version history + restore, archive; payment methods + QR (Convex storage, magic-byte validation); owner payment requests with private receipts (JPG/PNG/WebP/PDF, PDF active-content quarantine, size limit), idempotency key, daily rate limit, price frozen at submission; developer review (PENDING/UNDER_REVIEW/NEEDS_INFO/APPROVED/REJECTED/CANCELLED/REFUNDED), idempotent atomic activation with grace period; manual plan assignment; audit_logs; stats; expiry reminder cron.
+- Limits enforced server-side: employees, distributors, customers (Free plan limits from published FREE plan).
+- Screens: src/screens/Subscription.tsx (owner /upgrade), src/screens/DevBilling.tsx (dev billing tab), OrgSubscription in org sheet.
+- Tests: iteration 6 passed; tests/billing_smoke.py.
+
+## Iteration 2026-06 (e) — Offline, returns, hardening
+- Strict returns (returns.createSales): only products sold by same distributor to same customer, up to sold minus returned; concurrency-safe (Convex serializable mutations); quantity validation; sales quantity validation.
+- voidSale refuses when returns depend on the sale.
+- Offline: local return pre-check, dependency ordering over whole queue (customers → sales → returns), 409 conflicts kept in tray, rejected items drop optimistic rows + refetch, web online/offline listeners, 6-state SyncBadge with counts, readable failure reasons.
+- Tests: tests/returns_validation.py 13/13, tests/void_guard.py 5/5, iterations 7–8 passed.
+
+## Backlog / risks
+- Free/Pro/VIP are drafts at price 0 and there are no active payment methods: developer must set prices, add a method and publish.
+- Trial eligibility per plan, malware scanning (only signature checks), storage retention policy not implemented.
+- Cross-distributor isolation verified by code review only (single test distributor).
+- If a queued customer is permanently rejected, its dependent items still fail individually.

@@ -70,6 +70,7 @@ export const create = mutation({
     }
     const cust = await orgCustomer(ctx, user, a.customer_id);
     if (!a.items.length) throw new Error("أضف منتجاً واحداً على الأقل");
+    if (a.items.some((it: any) => !(it.quantity > 0) || it.quantity > 1e6)) throw new Error("كمية غير صالحة");
 
     const { rate, currency } = await orgMoney(ctx, user.org_id!);
 

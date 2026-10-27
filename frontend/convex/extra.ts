@@ -21,6 +21,7 @@ import {
   round2,
   sumBy,
   isPro,
+  audit,
   hasFeature,
   MODULES,
   TIERS,
@@ -95,10 +96,24 @@ export const voidSale = mutation({
     const user = await require(ctx, token, STAFF);
     const s = await docOrgUnique(ctx, "sales", id, user.org_id!);
     if (!s || s.voided) throw new Error("الفاتورة غير موجودة أو ملغاة");
+    // Returns are only valid against sold quantity: if voiding would leave returns without a sale
+    // behind them (stock + balance credited twice), refuse — remove/adjust the returns first.
+    const net: Record<string, number> = {};
+    for (const o of await ctx.db.query("sales").withIndex("by_customer", (q) => q.eq("customer_id", s.customer_id)).collect()) {
+      if (o.org_id !== user.org_id || o.distributor_id !== s.distributor_id || (o as any).voided || o.id === s.id) continue;
+      for (const it of (o.items ?? []) as any[]) net[it.product_id] = (net[it.product_id] ?? 0) + linePieces(it);
+    }
+    for (const r of await ctx.db.query("sales_returns").withIndex("by_customer", (q) => q.eq("customer_id", s.customer_id)).collect()) {
+      if (r.org_id !== user.org_id || r.distributor_id !== s.distributor_id) continue;
+      for (const it of (r.items ?? []) as any[]) net[it.product_id] = (net[it.product_id] ?? 0) - (it.pieces ?? linePieces(it));
+    }
+    if ((s.items ?? []).some((it: any) => (net[it.product_id] ?? 0) < -1e-9)) {
+      throw new Error("لا يمكن إلغاء الفاتورة: توجد مرتجعات مسجلة على منتجاتها لهذا العميل");
+    }
     for (const it of s.items || []) {
       const inv = await ctx.db.query("distributor_inventory").withIndex("by_dist_product", (q) => q.eq("distributor_id", s.distributor_id).eq("product_id", it.product_id)).unique();
       if (inv) await ctx.db.patch(inv._id, { quantity: round2((inv.quantity ?? 0) + linePieces(it)) });
-      await ctx.db.insert("stock_movements", { org_id: user.org_id!, product_id: it.product_id, product_name: it.product_name, type: "SALE_VOID", qty: linePieces(it), by: user.name ?? null, by_role: "AGENT", at: nowIso() });
+      await ctx.db.insert("stock_movements", { org_id: user.org_id!, product_id: it.product_id, product_name: it.product_name, type: "SALE_VOID", qty: linePieces(it), by: user.name ?? null, by_role: user.role === "EMPLOYEE" ? "AGENT" : user.role, at: nowIso() });
     }
     const cust = await docOrgUnique(ctx, "customers", s.customer_id, user.org_id!);
     if (cust) await ctx.db.patch(cust._id, { balance: round2((cust.balance ?? 0) - (s.remaining ?? 0)) });
@@ -285,16 +300,6 @@ export const orgCurrency = mutation({
   },
 });
 
-export const plansList = query({
-  args: { token: v.string() },
-  handler: async (ctx, { token }) => {
-    const user = await getUser(ctx, token);
-    let rows = await ctx.db.query("plans").collect();
-    if (user.role !== "DEVELOPER") rows = rows.filter((p) => p.active);
-    rows.sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
-    return cleanAll(rows);
-  },
-});
 
 export const settingsPayment = query({
   args: { token: v.string() },
@@ -306,37 +311,7 @@ export const settingsPayment = query({
 });
 
 // ---------------- upgrade requests ----------------
-export const upgradesList = query({
-  args: { token: v.string() },
-  handler: async (ctx, { token }) => {
-    const user = await getUser(ctx, token);
-    let rows;
-    if (user.role === "DEVELOPER") rows = await ctx.db.query("upgrade_requests").collect();
-    else if (user.role === "OWNER") rows = await ctx.db.query("upgrade_requests").withIndex("by_org", (q) => q.eq("org_id", user.org_id!)).collect();
-    else throw new Error("ليس لديك صلاحية");
-    rows.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
-    return cleanAll(rows);
-  },
-});
 
-export const upgradesCreate = mutation({
-  args: { token: v.string(), plan_id: v.string(), billing: v.optional(v.string()), payment_ref: v.string(), notes: v.optional(v.string()) },
-  handler: async (ctx, a) => {
-    const user = await getUser(ctx, a.token);
-    if (user.role !== "OWNER") throw new Error("ليس لديك صلاحية");
-    const plan: any = (await ctx.db.query("plans").collect()).find((p) => p.id === a.plan_id && p.active);
-    if (!plan) throw new Error("الخطة غير متاحة");
-    if (!a.payment_ref.trim()) throw new Error("أدخل رقم/مرجع عملية الدفع");
-    const pending = (await ctx.db.query("upgrade_requests").withIndex("by_org", (q) => q.eq("org_id", user.org_id!)).collect()).find((r) => r.status === "PENDING");
-    if (pending) throw new Error("لديك طلب قيد المراجعة بالفعل");
-    const yearly = a.billing === "yearly";
-    if (yearly && !plan.yearly_price) throw new Error("لا يوجد سعر سنوي لهذه الخطة");
-    const org: any = await orgById(ctx, user.org_id!);
-    const doc = { id: newId(), org_id: org.id, org_name: org.name, owner_email: user.email, plan_id: plan.id, plan_name: plan.name + (yearly ? " (سنوي)" : ""), billing: yearly ? "yearly" : "monthly", price: yearly ? plan.yearly_price : plan.price, currency: plan.currency, days: yearly ? 365 : plan.days, max_employees: plan.max_employees, tier: plan.tier ?? "PRO", modules: plan.modules ?? MODULES, max_distributors: plan.max_distributors ?? null, payment_ref: a.payment_ref.trim(), notes: a.notes ?? "", status: "PENDING", created_at: nowIso() };
-    await ctx.db.insert("upgrade_requests", doc);
-    return doc;
-  },
-});
 
 // ---------------- deletion requests (org) ----------------
 export const deletionRequest = mutation({
@@ -561,6 +536,7 @@ export const devPatchOrg = mutation({
     token: v.string(), id: v.string(), status: v.optional(v.string()), extend_days: v.optional(v.number()),
     plan_tier: v.optional(v.string()), modules: v.optional(v.array(v.string())), max_employees: v.optional(v.number()),
     max_distributors: v.optional(v.union(v.number(), v.null())),
+    max_customers: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, a) => {
     await require(ctx, a.token, DEV);
@@ -571,57 +547,19 @@ export const devPatchOrg = mutation({
     if (a.plan_tier !== undefined) { if (!TIERS.includes(a.plan_tier)) throw new Error("فئة الخطة غير صالحة"); patch.plan_tier = a.plan_tier; }
     if (a.modules !== undefined) patch.modules = cleanModules(a.modules);
     if (a.max_employees !== undefined) patch.max_employees = Math.max(1, Math.floor(a.max_employees));
+    if (a.max_customers !== undefined) patch.max_customers = a.max_customers == null ? null : Math.max(0, Math.floor(a.max_customers));
     if (a.max_distributors !== undefined) patch.max_distributors = a.max_distributors == null ? null : Math.max(0, Math.min(Math.floor(a.max_distributors), patch.max_employees ?? org.max_employees ?? Infinity));
     if (a.status === "ACTIVE" || a.status === "SUSPENDED") patch.status = a.status;
     if (a.extend_days) { const base = Math.max(Date.parse(org.expires_at), Date.now()); patch.expires_at = new Date(base + a.extend_days * 86400000).toISOString(); patch.plan = "LICENSE"; }
     await ctx.db.patch(org._id, patch);
+    await audit(ctx, await getUser(ctx, a.token), "subscription.override", { org_id: org.id, before: { status: org.status, expires_at: org.expires_at, plan_tier: org.plan_tier, modules: org.modules, max_employees: org.max_employees, max_distributors: org.max_distributors }, after: patch });
     return clean(await ctx.db.get(org._id));
   },
 });
 
-const planArgs = {
-  token: v.string(), name: v.string(), price: v.number(), currency: v.optional(v.string()), days: v.optional(v.number()),
-  max_employees: v.optional(v.number()), max_distributors: v.optional(v.union(v.number(), v.null())), tier: v.optional(v.string()),
-  modules: v.optional(v.array(v.string())), features: v.optional(v.any()), active: v.optional(v.boolean()), yearly_price: v.optional(v.union(v.number(), v.null())),
-};
-function planBody(a: any) {
-  if (!a.name.trim()) throw new Error("أدخل اسم الخطة");
-  if (a.price < 0 || (a.yearly_price != null && a.yearly_price < 0)) throw new Error("السعر غير صالح");
-  const tier = a.tier ?? "PRO";
-  if (!TIERS.includes(tier)) throw new Error("فئة الخطة غير صالحة");
-  const max_employees = Math.max(1, Math.floor(a.max_employees ?? 5));
-  const max_distributors = a.max_distributors == null ? null : Math.max(0, Math.min(Math.floor(a.max_distributors), max_employees));
-  return {
-    name: a.name.trim(), price: a.price, currency: a.currency ?? "USD", days: Math.max(1, Math.floor(a.days ?? 30)), max_employees, max_distributors,
-    tier, modules: cleanModules(a.modules) ?? MODULES, features: a.features ?? [], active: a.active ?? true, yearly_price: a.yearly_price ?? null,
-  };
-}
 
-export const devPlanCreate = mutation({
-  args: planArgs,
-  handler: async (ctx, a) => {
-    await require(ctx, a.token, DEV);
-    const doc = { id: newId(), ...planBody(a), created_at: nowIso() };
-    await ctx.db.insert("plans", doc);
-    return doc;
-  },
-});
 
-export const devPlanUpdate = mutation({
-  args: { ...planArgs, id: v.string() },
-  handler: async (ctx, a) => {
-    await require(ctx, a.token, DEV);
-    const p: any = await ctx.db.query("plans").withIndex("by_biz_id", (q) => q.eq("id", a.id)).unique();
-    if (!p) throw new Error("الخطة غير موجودة");
-    await ctx.db.patch(p._id, planBody(a));
-    return clean(await ctx.db.get(p._id));
-  },
-});
 
-export const devPlanDelete = mutation({
-  args: { token: v.string(), id: v.string() },
-  handler: async (ctx, { token, id }) => { await require(ctx, token, DEV); const p = await ctx.db.query("plans").withIndex("by_biz_id", (q) => q.eq("id", id)).unique(); if (p) await ctx.db.delete(p._id); return { ok: true }; },
-});
 
 export const devSettingsPayment = mutation({
   args: { token: v.string(), payment_address: v.optional(v.string()), whatsapp: v.optional(v.string()), instructions: v.optional(v.string()) },
@@ -634,26 +572,6 @@ export const devSettingsPayment = mutation({
   },
 });
 
-export const devUpgradeReview = mutation({
-  args: { token: v.string(), id: v.string(), action: v.string(), note: v.optional(v.string()) },
-  handler: async (ctx, a) => {
-    await require(ctx, a.token, DEV);
-    const req: any = (await ctx.db.query("upgrade_requests").withIndex("by_biz_id", (q) => q.eq("id", a.id)).unique());
-    if (!req || req.status !== "PENDING") throw new Error("الطلب غير موجود أو تمت مراجعته");
-    let status: string;
-    if (a.action === "approve") {
-      const org: any = await orgById(ctx, req.org_id);
-      const base = Math.max(Date.parse(org.expires_at), Date.now());
-      await ctx.db.patch(org._id, { plan: "LICENSE", plan_name: req.plan_name, plan_tier: req.tier ?? "PRO", modules: req.modules ?? MODULES, max_distributors: req.max_distributors ?? null, max_employees: req.max_employees, status: "ACTIVE", expires_at: new Date(base + req.days * 86400000).toISOString() });
-      status = "APPROVED";
-    } else if (a.action === "reject") status = "REJECTED";
-    else throw new Error("إجراء غير صالح");
-    await ctx.db.patch(req._id, { status, review_note: a.note ?? "", reviewed_at: nowIso() });
-    const org: any = await orgById(ctx, req.org_id);
-    if (org) await notify(ctx, [org.owner_id], "upgrade", status === "APPROVED" ? "تمت الموافقة على الترقية" : "تم رفض طلب الترقية", req.plan_name);
-    return clean(await ctx.db.get(req._id));
-  },
-});
 
 export const devMonitoring = query({
   args: { token: v.string() },

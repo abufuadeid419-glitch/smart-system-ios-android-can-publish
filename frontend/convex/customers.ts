@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
-import { AGENT, ANY_ORG, clean, cleanAll, isAgent, newId, nowIso, require } from "./lib";
+import { AGENT, ANY_ORG, clean, cleanAll, isAgent, newId, nowIso, orgById, orgLimits, require } from "./lib";
 
 function validateCustomer(a: any) {
   const missing: string[] = [];
@@ -75,6 +75,12 @@ export const create = mutation({
       if (ex) return clean(ex);
     }
     validateCustomer(a);
+    // Plan limit on customers (server-side; Convex mutations are serialized so concurrent creates can't overshoot).
+    const lim = await orgLimits(ctx, await orgById(ctx, user.org_id!));
+    if (lim.customers != null) {
+      const count = (await ctx.db.query("customers").withIndex("by_org", (q) => q.eq("org_id", user.org_id!)).collect()).length;
+      if (count >= lim.customers) throw new Error(`خطتك تسمح بـ ${lim.customers} عميل فقط — قم بالترقية لإضافة المزيد`);
+    }
     if (a.type_id) {
       const t = await ctx.db.query("customer_types").withIndex("by_biz_id", (q) => q.eq("id", a.type_id as string)).filter((q) => q.eq(q.field("org_id"), user.org_id!)).unique();
       if (!t) throw new Error("فئة العميل غير موجودة");

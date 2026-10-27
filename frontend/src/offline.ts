@@ -35,6 +35,8 @@ export type QItem = {
   // Earliest next-send time (ISO) for backoff.
   next_attempt_at?: string;
   error?: string;
+  // Set when the server answered 409 (its data won; the local change was not applied).
+  conflict?: boolean;
   created_at: string;
 };
 
@@ -258,10 +260,12 @@ async function sendOne(it: QItem) {
       return "offline" as const;
     }
     if (kind === "conflict") {
-      // Server is authoritative; drop local optimistic row + refetch.
+      // Server is authoritative; drop local optimistic row + refetch, and keep the item visible
+      // in the tray as a CONFLICT so the user knows it was not applied (can retry or discard).
       await dropOptimistic(it.id);
       queryClient.invalidateQueries({ queryKey: [it.path] });
       queue = queue.filter((q) => q.id !== it.id);
+      failed.push({ ...it, conflict: true, error: e.message ?? "تعارض مع بيانات الخادم" });
       return "conflict" as const;
     }
     if (kind === "transient") {
@@ -276,9 +280,11 @@ async function sendOne(it: QItem) {
       if (idxQ >= 0) queue[idxQ] = { ...it, attempts, next_attempt_at: next, error: e.message };
       return "retry" as const;
     }
-    // permanent — move to failed tray
+    // permanent — move to failed tray (server rejected it, e.g. return over the sold quantity).
     if (idxQ >= 0) queue.splice(idxQ, 1);
     failed.push({ ...it, error: e.message ?? "فشل" });
+    // Drop the optimistic row so local balances / stock fall back to the server's truth.
+    await dropOptimistic(it.id);
     return "failed" as const;
   }
 }
@@ -291,6 +297,7 @@ export async function syncQueue() {
   progress = { done: 0, total: startTotal };
   notify();
   let anySuccess = false;
+  let anyFailed = false;
   let syncedCount = 0;
   try {
     // Loop: on each iteration, pick up to PARALLEL items such that no two
@@ -306,9 +313,14 @@ export async function syncQueue() {
       const inFlightPaths = new Set<string>();
       const batch: QItem[] = [];
       // Dependency order: offline-created customers must reach the server before any sale /
-      // collection / return that references them, so while customers are queued only they flush.
+      // collection / return that references them, and sales before the returns that depend on them.
+      // Checks the WHOLE queue (not just due items) so a dependency waiting on backoff still blocks.
       const ready = queue.filter(dueNow);
-      const pool = ready.some((q) => q.path === "/customers") ? ready.filter((q) => q.path === "/customers") : ready;
+      const pool = queue.some((q) => q.path === "/customers")
+        ? ready.filter((q) => q.path === "/customers")
+        : queue.some((q) => q.path === "/sales")
+          ? ready.filter((q) => q.path !== "/sales-returns")
+          : ready;
       for (const it of pool) {
         if (batch.length >= PARALLEL) break;
         if (inFlightPaths.has(it.path)) continue; // keep per-path order
@@ -337,6 +349,7 @@ export async function syncQueue() {
           anySuccess = true;
         }
         if (o === "ok") syncedCount++;
+        if (o === "failed" || o === "conflict") anyFailed = true;
         if (o === "offline") hitOffline = true;
       }
       notify();
@@ -352,7 +365,8 @@ export async function syncQueue() {
     progress = { done: 0, total: 0 };
     notify();
   }
-  if (anySuccess) queryClient.invalidateQueries();
+  // Refetch server truth after successes AND rejections (rejected items' optimistic balance/stock edits).
+  if (anySuccess || anyFailed) queryClient.invalidateQueries();
   // Notify UI listeners of successful completion so they can toast the user.
   if (syncedCount > 0) completeListeners.forEach((f) => f(syncedCount));
 }
@@ -391,12 +405,27 @@ export function startSyncLoop() {
     }
     if (next) syncQueue();
   });
+  // Web: NetInfo may miss browser online/offline events — listen to them directly.
+  const w: any = typeof window !== "undefined" ? window : null;
+  const onWebOnline = () => {
+    online = true;
+    notify();
+    syncQueue();
+  };
+  const onWebOffline = () => {
+    online = false;
+    notify();
+  };
+  w?.addEventListener?.("online", onWebOnline);
+  w?.addEventListener?.("offline", onWebOffline);
   // Periodic kick so backoff-scheduled items eventually get picked up even
   // if the NetInfo listener never fires (web preview, flaky signal).
   const t = setInterval(syncQueue, 30000);
   return () => {
     unsub();
     clearInterval(t);
+    w?.removeEventListener?.("online", onWebOnline);
+    w?.removeEventListener?.("offline", onWebOffline);
     if (wakeTimer) clearTimeout(wakeTimer);
   };
 }
